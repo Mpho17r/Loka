@@ -1,41 +1,24 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { Card, H1, H2, Muted, Screen, SponsoredTag } from '../components/ui';
+import { Card, H1, H2, Muted, Screen } from '../components/ui';
+import { SponsoredSlot } from '../components/SponsoredSlot';
 import { colors } from '../theme';
 import { useApp } from '../store/AppState';
-import { liveAds } from '../lib/ads';
 import { VIEWER_CITY } from '../data/sample';
-import type { RootStackParamList, TabParamList } from '../navigation/types';
-
-type Nav = BottomTabNavigationProp<TabParamList> & NativeStackNavigationProp<RootStackParamList>;
+import type { TabParamList } from '../navigation/types';
 
 export default function HomeScreen() {
-  const nav = useNavigation<Nav>();
-  const { campaigns } = useApp();
-  const banner = liveAds(campaigns, ['homepage'], VIEWER_CITY)[0];
+  const nav = useNavigation<BottomTabNavigationProp<TabParamList>>();
+  const { mode } = useApp();
 
   return (
     <Screen>
       <H1>Loka</H1>
       <Muted style={{ marginBottom: 16 }}>Discover. Connect. Get it done.</Muted>
 
-      {banner ? (
-        <Card
-          style={{ backgroundColor: colors.sponsoredBg, borderColor: colors.accent }}
-          onPress={() =>
-            banner.targetType === 'product'
-              ? nav.navigate('ProductDetail', { id: banner.targetId })
-              : nav.navigate('ServiceDetail', { id: banner.targetId })
-          }
-        >
-          <SponsoredTag />
-          <Text style={{ fontSize: 18, fontWeight: '800', color: colors.ink, marginTop: 8 }}>{banner.headline}</Text>
-          <Muted>{banner.targetTitle}</Muted>
-        </Card>
-      ) : null}
+      <SponsoredSlot placement="homepage" city={VIEWER_CITY} />
 
       <H2>What do you need?</H2>
       <Card onPress={() => nav.navigate('Market')}>
@@ -55,7 +38,10 @@ export default function HomeScreen() {
       </Card>
 
       <View style={{ marginTop: 8 }}>
-        <Muted>Prototype with sample data. Payments are arranged directly between buyer and seller or provider.</Muted>
+        <Muted>
+          {mode === 'demo' ? 'Demo mode: sample data, nothing is saved. ' : ''}
+          Payments are arranged directly between buyer and seller or provider.
+        </Muted>
       </View>
     </Screen>
   );

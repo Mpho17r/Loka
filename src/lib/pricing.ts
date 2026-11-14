@@ -3,7 +3,8 @@ import type { Placement, Quote } from '../types';
 /**
  * Loka Promote pricing engine.
  * Rates are ILLUSTRATIVE TEST RATES (see Loka Promote spec, section 4), not approved prices.
- * In production these come from the price_books and tax_rules tables, not from code.
+ * This local copy is used for DEMO mode only. With a backend, prices come from the server
+ * (public.compute_quote reading price_books and tax_rules), so HQ can change them without a release.
  */
 export const PLACEMENTS: { id: Placement; label: string; cpm: number; note: string }[] = [
   { id: 'homepage', label: 'Homepage banner', cpm: 60, note: 'Top of the home page' },
@@ -53,7 +54,10 @@ export function calculateQuote(input: QuoteInput): Quote {
   const vat = round2(net * VAT_RATE);
   const total = round2(net + vat);
 
-  return { gross, geoMultiplier, premiumDiscount, creditApplied, net, vat, total, cpm };
+  return {
+    gross, geoMultiplier, premiumDiscount, creditApplied, managementFee: 0, net,
+    taxName: 'VAT', taxRate: VAT_RATE, vat, total, cpm, currency: 'ZAR',
+  };
 }
 
 /** Rough reach estimate to warn about under-delivery. Illustrative only. */

@@ -3,15 +3,16 @@ import { Alert } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, ChipRow, Empty, H2, Field, Muted, Screen } from '../components/ui';
-import { CITIES, SERVICES } from '../data/sample';
+import { CITIES } from '../data/sample';
 import { useApp } from '../store/AppState';
 import type { RootStackParamList } from '../navigation/types';
 
 export default function RequestQuoteScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { params } = useRoute<RouteProp<RootStackParamList, 'RequestQuote'>>();
-  const { addRequest } = useApp();
-  const service = SERVICES.find((s) => s.id === params.serviceId);
+  const { api, services, profile, run } = useApp();
+  const service = services.find((s) => s.id === params.serviceId);
+  const [busy, setBusy] = useState(false);
 
   const [details, setDetails] = useState('');
   const [city, setCity] = useState('Thohoyandou');
@@ -25,15 +26,15 @@ export default function RequestQuoteScreen() {
   const budgetOk = budgetNum === undefined || (Number.isFinite(budgetNum) && budgetNum >= 0);
   const valid = details.trim().length >= 10 && dateOk && budgetOk;
 
-  const submit = () => {
-    addRequest({
-      serviceId: service.id,
-      serviceTitle: service.title,
-      details: details.trim(),
-      city,
-      budget: budgetNum,
+  const submit = async () => {
+    if (!profile) { Alert.alert('Sign in needed', 'Please sign in from the Account tab to request a quotation.'); return; }
+    setBusy(true);
+    const err = await run(() => api.submitRequest({
+      serviceId: service.id, serviceTitle: service.title, details: details.trim(), city, budget: budgetNum,
       preferredDate: date || 'Flexible',
-    });
+    }, profile));
+    setBusy(false);
+    if (err) { Alert.alert('Could not send request', err); return; }
     Alert.alert('Request submitted', 'You will receive quotations here. You are not charged for requesting a quote.', [
       { text: 'OK', onPress: () => nav.popToTop() },
     ]);
@@ -70,7 +71,7 @@ export default function RequestQuoteScreen() {
         keyboardType="decimal-pad"
         hint={budgetOk ? undefined : 'Enter a valid amount.'}
       />
-      <Button label="Submit request" onPress={submit} disabled={!valid} />
+      <Button label={busy ? 'Sending...' : 'Submit request'} onPress={submit} disabled={!valid || busy} />
     </Screen>
   );
 }

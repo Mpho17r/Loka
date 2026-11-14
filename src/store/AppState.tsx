@@ -1,94 +1,93 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import type { Campaign, CampaignStatus, ServiceRequest } from '../types';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { Api } from '../data/api';
+import { createDemoApi } from '../data/demoApi';
+import { supabaseApi } from '../data/supabaseApi';
+import { BACKEND_ENABLED } from '../lib/config';
+import { friendlyError } from '../lib/errors';
+import type { Campaign, HqData, Product, Profile, Service, ServiceRequest } from '../types';
 
-/**
- * In-memory state for the prototype. Everything here maps to a backend table
- * in the Loka specs (campaigns, service_requests, ad_credits, ad_accounts).
- */
-interface AppState {
-  isPremium: boolean;
-  setPremium: (v: boolean) => void;
-  creditBalance: number;
+export interface AppState {
+  api: Api;
+  mode: 'supabase' | 'demo';
+  ready: boolean;
+  profile: Profile | null;
+  isStaff: boolean;
+  products: Product[];
+  services: Service[];
   campaigns: Campaign[];
   requests: ServiceRequest[];
-  submitCampaign: (c: Omit<Campaign, 'id' | 'createdAt' | 'status' | 'delivered' | 'clicks'>) => Campaign;
-  setCampaignStatus: (id: string, status: CampaignStatus) => void;
-  addRequest: (r: Omit<ServiceRequest, 'id' | 'createdAt' | 'status'>) => ServiceRequest;
-  cancelRequest: (id: string) => void;
+  balance: number;
+  hq: HqData | null;
+  refresh: () => Promise<void>;
+  refreshHq: () => Promise<void>;
+  /** Runs an action, refreshes data afterwards, and returns an error message instead of throwing. */
+  run: (fn: () => Promise<unknown>) => Promise<string | null>;
 }
 
 const Ctx = createContext<AppState | null>(null);
 
-let counter = 100;
-const nextId = (prefix: string) => `${prefix}${++counter}`;
-const today = () => new Date().toISOString().slice(0, 10);
-
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
-  const [isPremium, setPremium] = useState(false);
-  const [creditBalance, setCreditBalance] = useState(100); // demo starting credit (R100)
+  const api = useMemo<Api>(() => (BACKEND_ENABLED ? supabaseApi : createDemoApi()), []);
+  const [ready, setReady] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
+  const [balance, setBalance] = useState(0);
+  const [hq, setHq] = useState<HqData | null>(null);
+  const profileRef = useRef<Profile | null>(null);
 
-  const submitCampaign: AppState['submitCampaign'] = useCallback((c) => {
-    const campaign: Campaign = {
-      ...c,
-      id: nextId('c'),
-      createdAt: today(),
-      status: 'Pending review',
-      delivered: 0,
-      clicks: 0,
-    };
-    setCampaigns((prev) => [campaign, ...prev]);
-    // Credit is reserved on submission and returned if the campaign is rejected or cancelled.
-    setCreditBalance((b) => Math.max(0, Math.round((b - c.quote.creditApplied) * 100) / 100));
-    return campaign;
-  }, []);
+  const isStaff = !!profile && profile.roles.length > 0;
 
-  const setCampaignStatus: AppState['setCampaignStatus'] = useCallback((id, status) => {
-    setCampaigns((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        const returning =
-          (status === 'Rejected' || status === 'Cancelled') &&
-          c.status !== 'Rejected' &&
-          c.status !== 'Cancelled';
-        if (returning) {
-          setCreditBalance((b) => Math.round((b + c.quote.creditApplied) * 100) / 100);
-        }
-        // Demo only: going Live simulates some delivery so reports have something to show.
-        if (status === 'Live' && c.delivered === 0) {
-          const delivered = Math.round(c.impressions * 0.12);
-          return { ...c, status, delivered, clicks: Math.round(delivered * 0.021) };
-        }
-        return { ...c, status };
-      }),
-    );
-  }, []);
+  const loadAll = useCallback(async () => {
+    try {
+      const [p, catalog] = await Promise.all([api.getProfile(), api.loadCatalog()]);
+      profileRef.current = p;
+      setProfile(p);
+      setProducts(catalog.products);
+      setServices(catalog.services);
+      if (p) {
+        const mine = await api.loadMine(p);
+        setCampaigns(mine.campaigns);
+        setRequests(mine.requests);
+        setBalance(mine.balance);
+      } else {
+        setCampaigns([]); setRequests([]); setBalance(0); setHq(null);
+      }
+    } catch {
+      // Keep whatever is on screen; individual actions surface their own errors.
+    } finally {
+      setReady(true);
+    }
+  }, [api]);
 
-  const addRequest: AppState['addRequest'] = useCallback((r) => {
-    const req: ServiceRequest = { ...r, id: nextId('r'), createdAt: today(), status: 'Submitted' };
-    setRequests((prev) => [req, ...prev]);
-    return req;
-  }, []);
+  const refreshHq = useCallback(async () => {
+    const p = profileRef.current;
+    if (!p || p.roles.length === 0) { setHq(null); return; }
+    try { setHq(await api.hqLoad(p)); } catch { /* shown as empty */ }
+  }, [api]);
 
-  const cancelRequest = useCallback((id: string) => {
-    setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'Cancelled' } : r)));
-  }, []);
+  const refresh = useCallback(async () => { await loadAll(); await refreshHq(); }, [loadAll, refreshHq]);
 
-  const value = useMemo(
-    () => ({
-      isPremium,
-      setPremium,
-      creditBalance,
-      campaigns,
-      requests,
-      submitCampaign,
-      setCampaignStatus,
-      addRequest,
-      cancelRequest,
-    }),
-    [isPremium, creditBalance, campaigns, requests, submitCampaign, setCampaignStatus, addRequest, cancelRequest],
-  );
+  useEffect(() => {
+    void refresh();
+    return api.onAuthChange(() => { void refresh(); });
+  }, [api, refresh]);
+
+  const run = useCallback(async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+      await refresh();
+      return null;
+    } catch (e) {
+      return friendlyError(e);
+    }
+  }, [refresh]);
+
+  const value = useMemo<AppState>(() => ({
+    api, mode: api.mode, ready, profile, isStaff, products, services, campaigns, requests, balance, hq, refresh, refreshHq, run,
+  }), [api, ready, profile, isStaff, products, services, campaigns, requests, balance, hq, refresh, refreshHq, run]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

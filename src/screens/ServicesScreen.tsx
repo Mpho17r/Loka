@@ -2,12 +2,12 @@ import React, { useMemo, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Card, ChipRow, Empty, H2, Muted, Screen, SponsoredTag, StatusPill, VerifiedBadge } from '../components/ui';
+import { Card, ChipRow, Empty, H2, Muted, Screen, StatusPill, VerifiedBadge } from '../components/ui';
 import { colors } from '../theme';
-import { CITIES, SERVICES, SERVICE_CATEGORIES } from '../data/sample';
+import { CITIES, SERVICE_CATEGORIES, VIEWER_CITY } from '../data/sample';
+import { SponsoredSlot } from '../components/SponsoredSlot';
 import { ALL_CITIES, formatZAR } from '../lib/pricing';
 import { useApp } from '../store/AppState';
-import { liveAds } from '../lib/ads';
 import type { Service } from '../types';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -20,27 +20,23 @@ export function priceLabel(s: Service): string {
 
 export default function ServicesScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { campaigns, requests } = useApp();
+  const { services, requests } = useApp();
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('All');
   const [city, setCity] = useState(ALL_CITIES);
 
   const results = useMemo(
     () =>
-      SERVICES.filter(
+      services.filter(
         (s) =>
           (category === 'All' || s.category === category) &&
           (city === ALL_CITIES || s.city === city || s.delivery !== 'On-site') &&
           (q.trim() === '' || (s.title + s.provider + s.description).toLowerCase().includes(q.trim().toLowerCase())),
       ),
-    [q, category, city],
+    [services, q, category, city],
   );
 
-  const viewerCity = city === ALL_CITIES ? 'Thohoyandou' : city;
-  const sponsored = liveAds(campaigns, category === 'All' ? ['search'] : ['search', 'category'], viewerCity).filter(
-    (c) => c.targetType === 'service',
-  )[0];
-  const sponsoredService = sponsored ? SERVICES.find((s) => s.id === sponsored.targetId) : undefined;
+  const viewerCity = city === ALL_CITIES ? VIEWER_CITY : city;
 
   const activeRequests = requests.filter((r) => r.status !== 'Cancelled');
 
@@ -75,16 +71,7 @@ export default function ServicesScreen() {
       <ChipRow options={SERVICE_CATEGORIES} value={category} onChange={setCategory} />
       <ChipRow options={[ALL_CITIES, ...CITIES]} value={city} onChange={setCity} />
 
-      {sponsored && sponsoredService ? (
-        <Card
-          style={{ backgroundColor: colors.sponsoredBg, borderColor: colors.accent }}
-          onPress={() => nav.navigate('ServiceDetail', { id: sponsoredService.id })}
-        >
-          <SponsoredTag />
-          <Text style={{ fontSize: 17, fontWeight: '800', color: colors.ink, marginTop: 6 }}>{sponsored.headline}</Text>
-          <Muted>{sponsoredService.title} · {sponsoredService.provider}</Muted>
-        </Card>
-      ) : null}
+      <SponsoredSlot placement={category === 'All' ? 'search' : 'category'} city={viewerCity} targetType="service" />
 
       {results.length === 0 ? (
         <Empty title="No providers found" body="Try another category or city." />

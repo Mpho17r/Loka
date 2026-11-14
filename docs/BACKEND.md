@@ -1,0 +1,40 @@
+# Back end reference
+
+Migrations are in `supabase/migrations/` and run in order.
+
+| File | Contents |
+| --- | --- |
+| `...01_core.sql` | countries, cities, profiles, staff roles, products, services, service requests, audit log |
+| `...02_promote_tables.sql` | placements, price books, tax rules, settings, ad accounts, campaigns and revisions, quotes, invoices, payments, credits, moderation, complaints, managed requests, impressions, clicks, frequency, daily stats |
+| `...03_promote_functions.sql` | pricing, campaign lifecycle, HQ actions, ad serving and tracking, scheduled jobs, advertiser report view |
+| `...04_rls.sql` | row-level security and grants |
+
+## Campaign lifecycle
+
+`pending_review` -> HQ approves -> `approved_awaiting_payment` -> payment verified -> `scheduled` -> `live` (on the
+start date) -> `completed`. A campaign never serves until it is both approved and payment-verified. A campaign whose
+total is R0 (fully covered by credit) counts as paid. Side exits: `changes_requested`, `rejected`, `paused`,
+`terminated` (HQ), `cancelled` (advertiser). Unused impressions come back as advertising credit.
+
+## Who can call what
+
+| Role | Can |
+| --- | --- |
+| Visitor | read listings; be served adverts; count impressions and clicks |
+| Signed-in user | manage own listings and requests; quote and create campaigns for own listings (verified accounts only); pay, pause, resume, cancel own campaigns; file complaints |
+| `ops` | review and moderate campaigns, pause or terminate, handle complaints, set verification and premium |
+| `finance` | verify payments, refunds, credits, revenue report |
+| `country_admin` | all of the above for one country, plus price books and settings |
+| `owner` | everything, all countries |
+
+Every sensitive action requires a reason and is written to `audit_logs`.
+
+## Adding a country
+
+Insert the country, cities, `placement_availability`, `price_books`, `tax_rules` and `promote_settings`, then set
+`countries.promote_enabled = true`. No code release is needed.
+
+## After adding tables
+
+`20261113000004_rls.sql` revokes default privileges and grants access explicitly. New tables need `enable row level
+security` plus policies, and new functions need an explicit `grant execute`.

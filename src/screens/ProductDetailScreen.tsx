@@ -4,14 +4,16 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Empty, H1, Muted, Screen, VerifiedBadge } from '../components/ui';
 import { colors } from '../theme';
-import { PRODUCTS } from '../data/sample';
+import { useApp } from '../store/AppState';
 import { formatZAR } from '../lib/pricing';
 import type { RootStackParamList } from '../navigation/types';
 
 export default function ProductDetailScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { params } = useRoute<RouteProp<RootStackParamList, 'ProductDetail'>>();
-  const p = PRODUCTS.find((x) => x.id === params.id);
+  const { products, profile, mode } = useApp();
+  const p = products.find((x) => x.id === params.id);
+  const canPromote = mode === 'demo' || (!!profile && p?.ownerId === profile.id);
 
   if (!p) return <Screen><Empty title="Listing not found" body="It may have been removed." /></Screen>;
 
@@ -39,11 +41,13 @@ export default function ProductDetailScreen() {
         onPress={() => Alert.alert('Enquiry sent', `${p.seller} will reply in your messages. (Prototype: messaging is not connected yet.)`)}
         style={{ marginBottom: 10 }}
       />
-      <Button
-        label="Promote this product"
-        variant="secondary"
-        onPress={() => nav.navigate('CampaignBuilder', { targetType: 'product', targetId: p.id })}
-      />
+      {canPromote ? (
+        <Button
+          label="Promote this product"
+          variant="secondary"
+          onPress={() => nav.navigate('CampaignBuilder', { targetType: 'product', targetId: p.id })}
+        />
+      ) : null}
     </Screen>
   );
 }

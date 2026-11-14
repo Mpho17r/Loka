@@ -4,18 +4,20 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Empty, H1, Muted, Row, Screen, VerifiedBadge } from '../components/ui';
 import { colors } from '../theme';
-import { SERVICES } from '../data/sample';
+import { useApp } from '../store/AppState';
 import { priceLabel } from './ServicesScreen';
 import type { RootStackParamList } from '../navigation/types';
 
 export default function ServiceDetailScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { params } = useRoute<RouteProp<RootStackParamList, 'ServiceDetail'>>();
-  const s = SERVICES.find((x) => x.id === params.id);
+  const { services, profile, mode } = useApp();
+  const s = services.find((x) => x.id === params.id);
+  const canPromote = mode === 'demo' || (!!profile && s?.ownerId === profile.id);
 
   if (!s) return <Screen><Empty title="Service not found" body="It may have been removed." /></Screen>;
 
-  const isLokaDirect = s.provider === 'Loka Direct';
+  const isLokaDirect = s.providedByLoka;
 
   return (
     <Screen>
@@ -47,11 +49,13 @@ export default function ServiceDetailScreen() {
       </Card>
 
       <Button label="Request a quotation" onPress={() => nav.navigate('RequestQuote', { serviceId: s.id })} style={{ marginBottom: 10 }} />
-      <Button
-        label="Promote this service"
-        variant="secondary"
-        onPress={() => nav.navigate('CampaignBuilder', { targetType: 'service', targetId: s.id })}
-      />
+      {canPromote ? (
+        <Button
+          label="Promote this service"
+          variant="secondary"
+          onPress={() => nav.navigate('CampaignBuilder', { targetType: 'service', targetId: s.id })}
+        />
+      ) : null}
     </Screen>
   );
 }

@@ -1,28 +1,73 @@
-# Loka app (prototype)
+# Loka
 
-React Native (Expo, TypeScript) prototype of the Loka mobile app by Saccharum Technologies.
-Includes **Loka Market**, **Loka Services** and **Loka Promote**, running on sample data.
+Mobile app by Saccharum Technologies: **Loka Market**, **Loka Services** and **Loka Promote** (advertising).
+React Native (Expo) + TypeScript front end, Supabase (Postgres) back end.
 
-## Run
+The app runs in two modes:
+
+| Mode | When | Data |
+| --- | --- | --- |
+| **Demo** | No Supabase keys set | In-memory sample data. Every flow works, nothing is saved. |
+| **Live** | `.env` has your Supabase URL and anon key | Real accounts, listings, campaigns, billing and HQ actions. |
+
+## Run the app
+
 ```bash
 npm install
-npx expo install --fix   # aligns library versions with your Expo SDK
-npx expo start           # scan the QR code with Expo Go, or press a / i
-npm test                 # pricing engine tests
-npm run typecheck
+npx expo install --fix      # aligns library versions with your Expo SDK
+npx expo start              # scan the QR code with Expo Go
+npm run typecheck && npm test
 ```
 
-## What works
-- **Market:** search, category and city filters, product details, verification badges, enquiry (stub).
-- **Services:** search and filters, provider details, a clear "who provides this service" notice, quotation requests with validation, "My requests".
-- **Promote:** "Promote this product/service" from any listing, campaign builder (placement, city, impressions, duration), live price preview with premium discount, advertising credit and 15% VAT, submit for review, campaign list and performance report.
-- **Sponsored slots:** once a campaign is Live it appears, labelled "Sponsored", on Home, Market or Services without changing organic order.
-- **Demo HQ actions** on the campaign screen simulate Saccharum HQ: approve, verify payment, start delivery, reject, terminate. In production these belong in the HQ control centre.
+## Connect a back end (Live mode)
 
-## Not built yet (needs a backend)
-Accounts and roles, real database and storage, image/video upload, messaging, payment records, moderation queue, real impression and click tracking, push notifications, multi-country price books. See the LOKA PROMOTE specification and the Implementation Plan for the build order.
+1. Create a project at supabase.com (or use the one behind Lovable Cloud).
+2. In the SQL editor run, in order, every file in `supabase/migrations/`, then `supabase/seed.sql`.
+   Or with the Supabase CLI: `supabase db push`.
+3. Copy `.env.example` to `.env` and fill in the project URL and **anon** key (Project Settings, API).
+   Never put the `service_role` key in the app.
+4. Sign up in the app, then make yourself HQ owner (SQL editor):
+   ```sql
+   insert into public.user_roles (user_id, role)
+   select id, 'owner' from auth.users where email = 'you@example.com';
+   ```
+5. An **HQ** tab appears. Verify your own account there (advertisers must be verified), then promote a listing.
+6. Schedule the two jobs (Database, Cron): `select public.run_campaign_jobs();` every 15 minutes and
+   `select public.grant_monthly_premium_credits();` once a month.
 
-## Notes
-- Rates in `src/lib/pricing.ts` are illustrative test rates, not approved prices. VAT at 15% must be confirmed with an accountant.
-- State is in memory (`src/store/AppState.tsx`); restarting the app resets it.
-- Replace `src/data/sample.ts` with backend queries when the Lovable Cloud project has been audited.
+Seed data is for South Africa. Prices (CPM) and 15% VAT are **illustrative test values**: confirm tax with an
+accountant and set real prices in the HQ price book before real customers pay anything.
+
+## What is built
+
+- **Market and Services:** listings, search and filters, quotation requests, "who provides this service" notice,
+  add your own product or service, verification badges that can never exceed the account's real level.
+- **Promote (advertisers):** promote an existing listing, choose placement, city or national, impressions and
+  duration, see the full price including VAT before submitting, use advertising credit and premium discount,
+  declare payment, pause, resume or cancel, performance report (impressions, clicks, CTR, spend, remaining).
+- **Sponsored slots:** labelled "Sponsored" on Home, Market and Services. Targeting, pacing and the
+  3-per-viewer-per-day frequency cap are enforced in the database. Impressions are counted after 1 second on screen.
+- **Saccharum HQ tab (staff only):** review queue (approve, reject or request changes with a reason), payment
+  verification, pause or terminate, complaints, revenue, account verification and premium flags, credits, refunds.
+- **Security:** row-level security on every table. App users cannot write campaigns, invoices, credits or prices
+  directly; they call database functions that re-check who they are. HQ roles are limited by country.
+
+## Tests
+
+- `npm test`: pricing engine and the demo back end (10 tests).
+- `npm run test:db`: applies every migration to a throwaway Postgres and runs 96 checks: the R713.00 worked
+  example, who may do what, payment and approval gates, frequency caps, no overselling, credit return on cancel
+  and reject, refunds, price-book permissions, scheduled jobs.
+
+## Not built yet
+
+- Image and video upload (adverts reuse the listing's details for now); storage buckets and the media scan.
+- Payment gateway. Payments are declared by the advertiser and verified by HQ, as in the plan. The
+  `payment_records` table and `invoices.method` are ready for a gateway adapter.
+- A second approver for large refunds; automated content scanning; push and email notifications; messaging.
+- Server-side search and paging (the app loads up to 500 active listings per type); partitioning of the raw
+  impression tables for high traffic.
+- Real-device testing. The app type-checks and bundles for Android, but has not been run on a phone.
+- Lint: `npx expo lint` needs to download its config; run it once on your machine.
+
+See `docs/` and the LOKA PROMOTE specification for the full design.
