@@ -168,7 +168,6 @@ grant execute on function public.advertiser_set_state(uuid, text) to authenticat
 grant execute on function public.hq_review_campaign(uuid, text, text, text) to authenticated;
 grant execute on function public.hq_verify_payment(uuid, text) to authenticated;
 grant execute on function public.hq_set_state(uuid, text, text, boolean) to authenticated;
-grant execute on function public.hq_refund(uuid, numeric, text, boolean) to authenticated;
 grant execute on function public.hq_adjust_credit(uuid, numeric, text) to authenticated;
 grant execute on function public.hq_set_profile_flags(uuid, text, boolean, text) to authenticated;
 grant execute on function public.hq_resolve_report(uuid, text, text) to authenticated;

@@ -23,6 +23,17 @@ PSQL+=(-d loka_test)
 for f in "$HERE"/migrations/*.sql; do echo "applying $(basename "$f")"; "${PSQL[@]}" -f "$f"; done
 "${PSQL[@]}" -f "$HERE/seed.sql"
 
+# Parallel test: 20 sessions x 10 attempts (200) against a campaign with only 50 impressions left to sell.
+CONC_ID=00000000-0000-0000-0000-00000000c0c0
+"${PSQL[@]}" -f "$HERE/tests/concurrency_setup.sql"
+for w in $(seq 1 20); do
+  { echo "set role anon;"; for k in $(seq 1 10); do echo "select public.record_impression('$CONC_ID', 'viewer-$w-$k-conctest');"; done; } > "$DATA/w$w.sql"
+  "${PSQL[@]}" -f "$DATA/w$w.sql" >/dev/null 2>&1 &
+done
+wait
+RESULT="$("${PSQL[@]}" -tA -c "select impressions_delivered || ',' || status || ',' || (select count(*) from public.ad_impressions where campaign_id = '$CONC_ID') from public.campaigns where id = '$CONC_ID'")"
+if [ "$RESULT" = "50,completed,50" ]; then echo "PASS: 200 parallel attempts sold exactly 50 impressions (got $RESULT)"; else echo "FAIL: parallel overselling test, expected 50,completed,50 got $RESULT"; exit 1; fi
+
 OUT="$DATA/test.out"
 if "${PSQL[@]}" -f "$HERE/tests/promote_test.sql" >"$OUT" 2>&1; then
   grep -E 'PASS' "$OUT" | sed 's/^psql:[^ ]* NOTICE:  //' 

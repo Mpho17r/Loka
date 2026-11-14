@@ -315,5 +315,56 @@ select t.eq('premium monthly credit is not granted twice in a month', t.q($$sele
 select t.login('alice');
 select t.fails('app users cannot run scheduled jobs', 'select public.run_campaign_jobs()', 'permission denied');
 
+
+-- ------------------------------------------------------------------ notifications
+select t.login('alice');
+select t.eq('advertiser was told the campaign was approved',
+  t.q($$select count(*) from public.notifications where title = 'Campaign approved' and campaign_id = $$ || quote_literal(t.id('c1'))), '1');
+select t.eq('advertiser was told payment was received',
+  t.q($$select count(*) from public.notifications where title = 'Payment received' and campaign_id = $$ || quote_literal(t.id('c1'))), '1');
+select t.eq('advertiser was told the campaign went live',
+  t.q($$select count(*) from public.notifications where title = 'Your campaign is live' and campaign_id = $$ || quote_literal(t.id('c1'))), '1');
+select t.eq('rejection notification quotes the HQ reason',
+  t.q($$select body from public.notifications where title = 'Campaign rejected'$$), 'Price not shown');
+select t.eq('HQ pause notification quotes the reason',
+  t.q($$select body from public.notifications where title = 'Campaign paused by Loka'$$), 'Complaint 17 under investigation');
+select t.eq('only the HQ pause notified the advertiser, not their own pause, resume or cancel',
+  t.q($$select count(*) from public.notifications where campaign_id = $$ || quote_literal(t.id('c1')) || $$ and title in ('Campaign paused by Loka', 'Campaign cancelled', 'Campaign paused')$$), '1');
+select t.fails('notifications cannot be forged by the user',
+  $$insert into public.notifications (user_id, title) values (auth.uid(), 'You won')$$, 'permission denied');
+select t.fails('users cannot rewrite notification text',
+  $$update public.notifications set title = 'x'$$, 'permission denied');
+update public.notifications set read = true;
+select t.eq('user can mark their notifications read', t.q($$select count(*) from public.notifications where not read$$), '0');
+select t.login('mallory');
+select t.eq('other users cannot see them', t.q($$select count(*) from public.notifications$$), '0');
+
+-- ------------------------------------------------------------------ two-person rule for large refunds (limit R500)
+select t.login('dave');
+select t.eq('refund of R600 needs a second approver',
+  t.q(format($$select public.hq_refund(%L, 600, 'Large goodwill refund')$$, (select id from public.invoices where campaign_id = t.id('c1')))), 'pending_approval');
+select t.eq('nothing is refunded until approved', t.q($$select count(*) from public.payment_records where kind = 'refund'$$), '1');
+select t.eq('pending request is visible to finance', t.q($$select count(*) from public.refund_requests where status = 'pending'$$), '1');
+select t.root();
+insert into t.ids select 'refund_req', id from public.refund_requests;
+select t.login('dave');
+select t.fails('requester cannot approve their own refund',
+  format($$select public.hq_decide_refund(%L, true)$$, t.id('refund_req')), 'second_approver_required');
+select t.fails('the request cannot push total refunds above the invoice',
+  format($$select public.hq_refund(%L, 100, 'too much in total')$$, (select id from public.invoices where campaign_id = t.id('c1'))), 'refund_exceeds_invoice');
+select t.login('carol');
+select t.fails('ops cannot decide refunds',
+  format($$select public.hq_decide_refund(%L, true)$$, t.id('refund_req')), 'not_allowed');
+select t.login('erin');
+select t.eq('a second finance user (owner) approves', t.q(format($$select public.hq_decide_refund(%L, true)$$, t.id('refund_req'))), 'refunded');
+select t.eq('refund is now recorded', t.q($$select count(*) from public.payment_records where kind = 'refund'$$), '2');
+select t.eq('request is marked executed', t.q($$select status from public.refund_requests$$), 'executed');
+select t.fails('a decided request cannot be decided again',
+  format($$select public.hq_decide_refund(%L, true)$$, t.id('refund_req')), 'request_already_decided');
+select t.login('alice');
+select t.eq('advertisers cannot see refund requests', t.q($$select count(*) from public.refund_requests$$), '0');
+select t.fails('advertisers cannot request refunds',
+  format($$select public.hq_refund(%L, 10, 'give me money')$$, (select id from public.invoices where campaign_id = t.id('c1'))), 'not_allowed');
+
 select t.root();
 rollback;

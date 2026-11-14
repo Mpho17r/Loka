@@ -168,6 +168,7 @@ create unique index ad_credits_monthly_once on public.ad_credits (account_id, mo
 -- ---------------------------------------------------------------- moderation, complaints, managed requests
 create table public.moderation_cases (
   id          uuid primary key default gen_random_uuid(),
+  seq         bigint generated always as identity,   -- strict ordering even inside one transaction
   campaign_id uuid not null references public.campaigns(id) on delete cascade,
   reviewer_id uuid,
   decision    text not null check (decision in ('approved', 'rejected', 'changes_requested', 'paused', 'terminated')),

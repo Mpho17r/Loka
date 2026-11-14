@@ -11,7 +11,7 @@ import type { RootStackParamList } from '../navigation/types';
 
 export default function AccountScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { api, mode, profile, products, services, requests, balance, run, isStaff } = useApp();
+  const { api, mode, profile, products, services, requests, balance, notifications, unread, run, isStaff } = useApp();
   const [signUp, setSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -67,6 +67,23 @@ export default function AccountScreen() {
           <Text style={{ fontWeight: '700', color: colors.warn }}>Account not verified</Text>
           <Muted>Verification builds trust and is required to advertise. Contact Saccharum support to get verified.</Muted>
         </Card>
+      ) : null}
+
+      {notifications.length > 0 ? (
+        <View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <H2>Notifications{unread > 0 ? ` (${unread} new)` : ''}</H2>
+            {unread > 0 ? <Chip label="Mark all read" onPress={() => run(() => api.markNotificationsRead())} /> : null}
+          </View>
+          {notifications.slice(0, 8).map((n) => (
+            <Card key={n.id} onPress={n.campaignId ? () => nav.navigate('CampaignDetail', { id: n.campaignId as string }) : undefined}
+                  style={n.read ? undefined : { borderColor: colors.primary, borderWidth: 2 }}>
+              <Text style={{ fontWeight: '700', color: colors.ink }}>{n.read ? '' : '● '}{n.title}</Text>
+              <Muted>{n.body}</Muted>
+              <Muted style={{ marginTop: 2 }}>{n.createdAt}</Muted>
+            </Card>
+          ))}
+        </View>
       ) : null}
 
       <Card>

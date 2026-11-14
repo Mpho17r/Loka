@@ -2,7 +2,7 @@ import type { Api, HqDecision, MineData, QuoteRequest } from './api';
 import { getViewerKey, supabase } from '../lib/supabase';
 import { ALL_CITIES } from '../lib/pricing';
 import { mapCampaign, mapProduct, mapProfile, mapQuote, mapRequest, mapService } from '../lib/mappers';
-import type { Ad, Campaign, HqData, HqReport, Placement, Quote } from '../types';
+import type { Ad, AppNotification, Campaign, HqData, HqReport, Placement, Quote } from '../types';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
@@ -120,6 +120,18 @@ export const supabaseApi: Api = {
     }));
   },
 
+  async loadNotifications(): Promise<AppNotification[]> {
+    const rows = ok<Row[]>(await client().from('notifications').select('*').order('created_at', { ascending: false }).limit(50));
+    return rows.map((n) => ({
+      id: n.id, title: n.title, body: n.body ?? '', read: !!n.read, createdAt: String(n.created_at).slice(0, 10),
+      campaignId: n.campaign_id ?? undefined,
+    }));
+  },
+
+  async markNotificationsRead() {
+    ok(await client().from('notifications').update({ read: true }).eq('read', false));
+  },
+
   async cancelRequest(id) {
     ok(await client().from('service_requests').update({ status: 'Cancelled' }).eq('id', id));
   },
@@ -219,7 +231,11 @@ export const supabaseApi: Api = {
       id: m.id, requester: nameById.get(m.requester_id) ?? 'Advertiser', brief: m.brief,
       budget: m.budget === null ? undefined : Number(m.budget), status: m.status,
     }));
-    return { campaigns, reports, revenue, accounts, managed };
+    const rr = await sb.from('refund_requests').select('*, invoices(number)').eq('status', 'pending').order('created_at', { ascending: false });
+    const refunds = rr.error ? [] : (rr.data as Row[]).map((r) => ({
+      id: r.id, invoiceNumber: r.invoices?.number ?? '', amount: Number(r.amount), reason: r.reason, requestedByMe: r.requested_by === profile.id,
+    }));
+    return { campaigns, reports, revenue, accounts, managed, refunds };
   },
 
   async hqReview(campaignId, decision: HqDecision, rule, reason) {
@@ -245,7 +261,12 @@ export const supabaseApi: Api = {
   },
 
   async hqRefund(invoiceId, amount, reason) {
-    ok(await client().rpc('hq_refund', { p_invoice: invoiceId, p_amount: amount, p_reason: reason, p_revoke_credit: true }));
+    const r = ok<string>(await client().rpc('hq_refund', { p_invoice: invoiceId, p_amount: amount, p_reason: reason, p_revoke_credit: true }));
+    return r === 'pending_approval' ? 'pending_approval' : 'refunded';
+  },
+
+  async hqDecideRefund(requestId, approve, reason) {
+    ok(await client().rpc('hq_decide_refund', { p_request: requestId, p_approve: approve, p_reason: reason || null }));
   },
 
   async hqUpdateManaged(requestId, status) {

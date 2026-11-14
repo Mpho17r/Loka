@@ -23,6 +23,9 @@ const MESSAGES: Record<string, string> = {
   refund_exceeds_invoice: 'The refund is more than the invoice total.',
   revoke_exceeds_balance: 'That is more than the credit balance.',
   invoice_not_refundable: 'This invoice cannot be refunded.',
+  second_approver_required: 'A different finance user must approve this refund.',
+  request_already_decided: 'That request has already been decided.',
+  request_not_found: 'That request could not be found.',
 };
 
 export function friendlyError(e: unknown): string {

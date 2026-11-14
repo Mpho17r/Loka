@@ -1,6 +1,6 @@
 import type {
   Ad, Campaign, CampaignInput, HqData, NewProduct, NewService, Placement, Product, Profile, Quote, Service,
-  ServiceRequest, Verification,
+  ServiceRequest, Verification, AppNotification,
 } from '../types';
 
 export interface QuoteRequest {
@@ -38,6 +38,8 @@ export interface Api {
   loadMine(profile: Profile): Promise<MineData>;
   submitRequest(input: { serviceId: string; serviceTitle: string; details: string; city: string; budget?: number; preferredDate: string }, profile: Profile): Promise<void>;
   cancelRequest(id: string): Promise<void>;
+  loadNotifications(): Promise<AppNotification[]>;
+  markNotificationsRead(): Promise<void>;
 
   // Promote: advertiser
   quote(req: QuoteRequest, profile: Profile, balance: number): Promise<Quote>;
@@ -59,7 +61,9 @@ export interface Api {
   hqSetState(campaignId: string, action: 'pause' | 'resume' | 'terminate', reason: string): Promise<void>;
   hqResolveReport(reportId: string, status: 'investigating' | 'actioned' | 'dismissed', resolution: string): Promise<void>;
   hqAdjustCredit(accountId: string, amount: number, reason: string): Promise<void>;
-  hqRefund(invoiceId: string, amount: number, reason: string): Promise<void>;
+  /** Refunds above the country's limit return 'pending_approval' and need a second finance user. */
+  hqRefund(invoiceId: string, amount: number, reason: string): Promise<'refunded' | 'pending_approval'>;
+  hqDecideRefund(requestId: string, approve: boolean, reason: string): Promise<void>;
   hqUpdateManaged(requestId: string, status: 'in_progress' | 'campaign_created' | 'declined'): Promise<void>;
   hqSetFlags(userId: string, flags: { verification?: Verification; premium?: boolean }, reason: string): Promise<void>;
 }

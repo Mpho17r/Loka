@@ -31,6 +31,13 @@ export default function HQScreen() {
     return true;
   };
   const amt = Number(amount.replace(',', '.'));
+  const refund = async (invoiceId: string) => {
+    let outcome = 'refunded' as 'refunded' | 'pending_approval'; // assigned inside the callback below
+    const err = await run(async () => { outcome = await api.hqRefund(invoiceId, amt, reason); });
+    if (err) { Alert.alert('Could not do that', err); return; }
+    setReason(''); setAmount('');
+    if (outcome === 'pending_approval') Alert.alert('Sent for approval', 'Refunds this large need a second finance user to approve them. It is listed under "Waiting for a second approver".');
+  };
 
   if (!hq) return <Screen><Empty title="Loading HQ data" body="If this does not load, your account may not have an HQ role." /></Screen>;
 
@@ -114,6 +121,25 @@ export default function HQScreen() {
       {section === 'Finance' ? (
         <View>
           <H2>Refunds and credits</H2>
+          {hq.refunds.length > 0 ? (
+            <View style={{ marginBottom: 8 }}>
+              <Text style={{ fontWeight: '700', color: colors.ink, marginBottom: 6 }}>Waiting for a second approver ({hq.refunds.length})</Text>
+              {hq.refunds.map((r) => (
+                <Card key={r.id} style={{ borderColor: colors.warn }}>
+                  <Row label={r.invoiceNumber} value={formatZAR(r.amount)} bold />
+                  <Muted style={{ marginBottom: 8 }}>{r.reason}</Muted>
+                  {r.requestedByMe ? (
+                    <Muted>You requested this. Another finance user must approve it.</Muted>
+                  ) : (
+                    <View style={{ gap: 8 }}>
+                      <Button label="Approve refund" onPress={() => act(() => api.hqDecideRefund(r.id, true, reason), false)} />
+                      <Button label="Reject" variant="danger" onPress={() => need() && act(() => api.hqDecideRefund(r.id, false, reason))} />
+                    </View>
+                  )}
+                </Card>
+              ))}
+            </View>
+          ) : null}
           <Field label="Amount in rand" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
           {paid.length === 0 ? <Empty title="No paid invoices" body="Verified invoices appear here." /> : null}
           {paid.map((c) => (
@@ -121,7 +147,7 @@ export default function HQScreen() {
               {header(c)}
               <Row label="Invoice total" value={formatZAR(c.invoice.total)} />
               <View style={{ gap: 8 }}>
-                <Button label="Refund the amount above" variant="secondary" onPress={() => need() && amt > 0 && act(() => api.hqRefund(c.invoice.id, amt, reason))} />
+                <Button label="Refund the amount above" variant="secondary" onPress={() => need() && amt > 0 && refund(c.invoice.id)} />
                 <Button label="Grant the amount above as credit" variant="secondary" onPress={() => need() && amt > 0 && act(() => api.hqAdjustCredit(c.accountId, amt, reason))} />
                 <Button label="Revoke the amount above from credit" variant="danger" onPress={() => need() && amt > 0 && act(() => api.hqAdjustCredit(c.accountId, -amt, reason))} />
               </View>

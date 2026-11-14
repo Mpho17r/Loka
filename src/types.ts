@@ -173,7 +173,25 @@ export interface HqManaged {
   status: 'new' | 'in_progress' | 'campaign_created' | 'declined';
 }
 
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: string;
+  campaignId?: string;
+}
+
+export interface HqRefund {
+  id: string;
+  invoiceNumber: string;
+  amount: number;
+  reason: string;
+  requestedByMe: boolean;
+}
+
 export interface HqData {
+  refunds: HqRefund[];
   managed: HqManaged[];
   campaigns: Campaign[];
   reports: HqReport[];

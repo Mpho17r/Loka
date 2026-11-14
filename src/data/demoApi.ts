@@ -2,7 +2,7 @@ import type { Api, HqDecision, QuoteRequest } from './api';
 import { ALL_CITIES, calculateQuote } from '../lib/pricing';
 import { PRODUCTS, SERVICES } from './sample';
 import { emojiFor } from '../lib/mappers';
-import type { Ad, Campaign, CampaignStatus, HqManaged, HqReport, Product, Profile, Service, ServiceRequest } from '../types';
+import type { Ad, AppNotification, Campaign, CampaignStatus, HqManaged, HqReport, Product, Profile, Service, ServiceRequest } from '../types';
 
 /**
  * In-memory implementation used when no Supabase project is configured. It mirrors the rules enforced by the real
@@ -17,6 +17,10 @@ export function createDemoApi(): Api {
   let requests: ServiceRequest[] = [];
   let reports: HqReport[] = [];
   let managed: HqManaged[] = [];
+  let notifications: AppNotification[] = [];
+  let refundRequests: { id: string; invoiceId: string; invoiceNumber: string; amount: number; reason: string }[] = [];
+  let lastReason = '';
+  const REFUND_LIMIT = 500; // above this a second finance user must approve (demo lets the same person approve)
   let balance = 100;
   let counter = 100;
   const listeners = new Set<() => void>();
@@ -28,7 +32,29 @@ export function createDemoApi(): Api {
     if (!c) throw new Error('campaign_not_found');
     return c;
   };
-  const set = (id: string, patch: Partial<Campaign>) => { campaigns = campaigns.map((c) => (c.id === id ? { ...c, ...patch } : c)); };
+  // Mirrors the database trigger: advertisers are told about HQ and schedule decisions, not their own actions.
+  const notice = (old: Campaign, c: Campaign): [string, string] | null => {
+    switch (c.status) {
+      case 'Approved, awaiting payment': return ['Campaign approved', `Please pay invoice ${c.invoice.number} so it can go live.`];
+      case 'Scheduled': return ['Payment received', `Your campaign starts on ${c.startDate}.`];
+      case 'Live': return old.status === 'Scheduled' ? ['Your campaign is live', 'Impressions are now being delivered.'] : null;
+      case 'Rejected': return ['Campaign rejected', lastReason || 'It did not meet the advertising policy.'];
+      case 'Changes requested': return ['Changes needed', lastReason || 'Please update your advert and resubmit.'];
+      case 'Paused': return c.pausedByHq ? ['Campaign paused by Loka', lastReason || 'We are reviewing it.'] : null;
+      case 'Terminated': return ['Campaign stopped', lastReason || 'It was stopped for a policy reason.'];
+      case 'Completed': return ['Campaign finished', 'All purchased impressions were delivered or the end date was reached.'];
+      default: return null;
+    }
+  };
+  const set = (id: string, patch: Partial<Campaign>) => {
+    const old = campaigns.find((x) => x.id === id);
+    campaigns = campaigns.map((c) => (c.id === id ? { ...c, ...patch } : c));
+    const now = campaigns.find((x) => x.id === id);
+    if (old && now && patch.status && patch.status !== old.status) {
+      const n = notice(old, now);
+      if (n) notifications = [{ id: 'n' + ++counter, title: n[0], body: n[1], read: false, createdAt: today(), campaignId: id }, ...notifications];
+    }
+  };
   const round2 = (n: number) => Math.round(n * 100) / 100;
 
   const release = (c: Campaign) => {
@@ -36,6 +62,12 @@ export function createDemoApi(): Api {
     let back = round2(f * c.quote.creditApplied);
     if (c.invoice.status === 'verified') back += round2(f * c.quote.net);
     balance = round2(balance + back);
+  };
+  const executeRefund = (invoiceId: string, amount: number) => {
+    const c = campaigns.find((x) => x.invoice.id === invoiceId);
+    if (!c) return;
+    balance = Math.max(0, round2(balance - Math.min(amount, balance)));
+    if (amount >= c.invoice.total) set(c.id, { invoice: { ...c.invoice, status: 'refunded' } });
   };
   const goLiveIfDue = (id: string) => {
     const c = find(id);
@@ -68,6 +100,8 @@ export function createDemoApi(): Api {
       requests = [{ id: 'r' + ++counter, serviceId: input.serviceId, serviceTitle: input.serviceTitle, details: input.details, city: input.city,
         budget: input.budget, preferredDate: input.preferredDate, status: 'Submitted', createdAt: today() }, ...requests];
     },
+    async loadNotifications() { return notifications; },
+    async markNotificationsRead() { notifications = notifications.map((n) => ({ ...n, read: true })); },
     async cancelRequest(id) { requests = requests.map((r) => (r.id === id ? { ...r, status: 'Cancelled' } : r)); },
 
     async quote(req: QuoteRequest, p, bal) {
@@ -143,11 +177,13 @@ export function createDemoApi(): Api {
       });
       return {
         campaigns, reports, managed,
+        refunds: refundRequests.map((r) => ({ id: r.id, invoiceNumber: r.invoiceNumber, amount: r.amount, reason: r.reason, requestedByMe: false })),
         revenue: [...byPlacement.entries()].map(([placement, r]) => ({ placement, ...r })),
         accounts: [{ id: profile.id, name: profile.fullName, verification: profile.verification, isPremium: profile.isPremium }],
       };
     },
     async hqReview(id, decision: HqDecision, _rule, reason) {
+      lastReason = reason;
       const c = find(id);
       if (c.status !== 'Pending review') throw new Error('not_pending_review');
       if (decision === 'approve') {
@@ -168,6 +204,7 @@ export function createDemoApi(): Api {
     },
     async hqSetState(id, action, reason) {
       needReason(reason);
+      lastReason = reason;
       const c = find(id);
       if (action === 'pause' && (c.status === 'Live' || c.status === 'Scheduled')) set(id, { status: 'Paused', pausedByHq: true });
       else if (action === 'resume' && c.status === 'Paused') set(id, { status: 'Live', pausedByHq: false });
@@ -185,8 +222,19 @@ export function createDemoApi(): Api {
       const c = campaigns.find((x) => x.invoice.id === invoiceId);
       if (!c || c.invoice.status !== 'verified') throw new Error('invoice_not_refundable');
       if (amount > c.invoice.total) throw new Error('refund_exceeds_invoice');
-      balance = Math.max(0, round2(balance - Math.min(amount, balance)));
-      if (amount >= c.invoice.total) set(c.id, { invoice: { ...c.invoice, status: 'refunded' } });
+      if (amount > REFUND_LIMIT) {
+        refundRequests = [{ id: 'rf' + ++counter, invoiceId, invoiceNumber: c.invoice.number, amount, reason }, ...refundRequests];
+        return 'pending_approval';
+      }
+      executeRefund(invoiceId, amount);
+      return 'refunded';
+    },
+    async hqDecideRefund(requestId, approve, reason) {
+      const r = refundRequests.find((x) => x.id === requestId);
+      if (!r) throw new Error('request_not_found');
+      if (!approve) needReason(reason);
+      refundRequests = refundRequests.filter((x) => x.id !== requestId);
+      if (approve) executeRefund(r.invoiceId, r.amount);
     },
     async hqUpdateManaged(id, status) { managed = managed.map((m) => (m.id === id ? { ...m, status } : m)); },
     async hqSetFlags(_userId, flags) {

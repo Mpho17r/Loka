@@ -4,7 +4,7 @@ import { createDemoApi } from '../data/demoApi';
 import { supabaseApi } from '../data/supabaseApi';
 import { BACKEND_ENABLED } from '../lib/config';
 import { friendlyError } from '../lib/errors';
-import type { Campaign, HqData, Product, Profile, Service, ServiceRequest } from '../types';
+import type { AppNotification, Campaign, HqData, Product, Profile, Service, ServiceRequest } from '../types';
 
 export interface AppState {
   api: Api;
@@ -17,6 +17,8 @@ export interface AppState {
   campaigns: Campaign[];
   requests: ServiceRequest[];
   balance: number;
+  notifications: AppNotification[];
+  unread: number;
   hq: HqData | null;
   refresh: () => Promise<void>;
   refreshHq: () => Promise<void>;
@@ -35,6 +37,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [balance, setBalance] = useState(0);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [hq, setHq] = useState<HqData | null>(null);
   const profileRef = useRef<Profile | null>(null);
 
@@ -52,8 +55,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         setCampaigns(mine.campaigns);
         setRequests(mine.requests);
         setBalance(mine.balance);
+        setNotifications(await api.loadNotifications().catch(() => []));
       } else {
-        setCampaigns([]); setRequests([]); setBalance(0); setHq(null);
+        setCampaigns([]); setRequests([]); setBalance(0); setNotifications([]); setHq(null);
       }
     } catch {
       // Keep whatever is on screen; individual actions surface their own errors.
@@ -86,8 +90,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const value = useMemo<AppState>(() => ({
-    api, mode: api.mode, ready, profile, isStaff, products, services, campaigns, requests, balance, hq, refresh, refreshHq, run,
-  }), [api, ready, profile, isStaff, products, services, campaigns, requests, balance, hq, refresh, refreshHq, run]);
+    api, mode: api.mode, ready, profile, isStaff, products, services, campaigns, requests, balance, notifications, unread: notifications.filter((n) => !n.read).length, hq, refresh, refreshHq, run,
+  }), [api, ready, profile, isStaff, products, services, campaigns, requests, balance, notifications, hq, refresh, refreshHq, run]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

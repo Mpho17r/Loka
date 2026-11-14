@@ -48,23 +48,30 @@ accountant and set real prices in the HQ price book before real customers pay an
 - **Sponsored slots:** labelled "Sponsored" on Home, Market and Services. Targeting, pacing and the
   3-per-viewer-per-day frequency cap are enforced in the database. Impressions are counted after 1 second on screen.
 - **Saccharum HQ tab (staff only):** review queue (approve, reject or request changes with a reason), payment
-  verification, pause or terminate, complaints, revenue, account verification and premium flags, credits, refunds.
+  verification, pause or terminate, complaints, revenue, account verification and premium flags, credits, refunds,
+  managed-advertising requests. Refunds above the country limit (R500 in the seed) need a **second finance user**
+  to approve; nobody can approve their own request.
+- **Notifications:** advertisers are told when a campaign is approved, paid, live, rejected, needs changes, paused or
+  stopped by HQ, finished (with the HQ reason). Shown in the Account tab with an unread badge. Their own
+  pause, resume and cancel do not notify them.
 - **Security:** row-level security on every table. App users cannot write campaigns, invoices, credits or prices
   directly; they call database functions that re-check who they are. HQ roles are limited by country.
 
 ## Tests
 
-- `npm test`: pricing engine and the demo back end (10 tests).
-- `npm run test:db`: applies every migration to a throwaway Postgres and runs 96 checks: the R713.00 worked
-  example, who may do what, payment and approval gates, frequency caps, no overselling, credit return on cancel
-  and reject, refunds, price-book permissions, scheduled jobs.
+- `npm test`: pricing engine and the demo back end (12 tests).
+- `npm run test:db`: applies every migration to a throwaway Postgres and runs 118 checks: the R713.00 worked
+  example, who may do what, payment and approval gates, frequency caps, credit return on cancel and reject,
+  refunds and the two-person rule, notifications, price-book permissions, scheduled jobs, and a parallel test where
+  20 sessions make 200 simultaneous attempts against 50 remaining impressions and exactly 50 are sold.
 
 ## Not built yet
 
-- Image and video upload (adverts reuse the listing's details for now); storage buckets and the media scan.
+- Image and video upload in the app. The `ad-media` and `payment-proofs` storage buckets and their access rules
+  are in the migrations (they apply on Supabase); the app screens and the media scan are not built.
 - Payment gateway. Payments are declared by the advertiser and verified by HQ, as in the plan. The
   `payment_records` table and `invoices.method` are ready for a gateway adapter.
-- A second approver for large refunds; automated content scanning; push and email notifications; messaging.
+- Automated content scanning; email and push notifications (in-app ones are built); messaging.
 - Server-side search and paging (the app loads up to 500 active listings per type); partitioning of the raw
   impression tables for high traffic.
 - Real-device testing. The app type-checks and bundles for Android, but has not been run on a phone.

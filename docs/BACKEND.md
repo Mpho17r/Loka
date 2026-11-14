@@ -8,6 +8,7 @@ Migrations are in `supabase/migrations/` and run in order.
 | `...02_promote_tables.sql` | placements, price books, tax rules, settings, ad accounts, campaigns and revisions, quotes, invoices, payments, credits, moderation, complaints, managed requests, impressions, clicks, frequency, daily stats |
 | `...03_promote_functions.sql` | pricing, campaign lifecycle, HQ actions, ad serving and tracking, scheduled jobs, advertiser report view |
 | `...04_rls.sql` | row-level security and grants |
+| `...05_refunds_notifications.sql` | two-person refund rule, advertiser notifications, storage buckets and rules |
 
 ## Campaign lifecycle
 
@@ -38,3 +39,15 @@ Insert the country, cities, `placement_availability`, `price_books`, `tax_rules`
 
 `20261113000004_rls.sql` revokes default privileges and grants access explicitly. New tables need `enable row level
 security` plus policies, and new functions need an explicit `grant execute`.
+
+## Refunds
+
+Up to `promote_settings.refund_approval_limit` (R500 in the seed) a finance user refunds immediately. Above it,
+`hq_refund` creates a `refund_requests` row and returns `pending_approval`; a different finance user (or the owner)
+calls `hq_decide_refund`. Cash refunds revoke an equal amount of released credit by default so money is not returned
+twice. VAT on the unused share needs a credit note from Finance.
+
+## Notifications
+
+A trigger on `campaigns.status` writes to `notifications`, quoting the latest moderation reason. Users can read their
+own rows and flip `read`; they cannot create or edit them.

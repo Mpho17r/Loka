@@ -314,9 +314,9 @@ begin
     raise exception 'invalid_decision';
   end if;
 
-  update public.campaigns set status = v_new, updated_at = now() where id = c.id;
   insert into public.moderation_cases (campaign_id, reviewer_id, decision, policy_rule, reason)
   values (c.id, auth.uid(), v_dec, p_policy_rule, p_reason);
+  update public.campaigns set status = v_new, updated_at = now() where id = c.id;
   if v_new = 'rejected' then perform public._release_unused(c.id); end if;
   if v_new = 'scheduled' then
     perform public._maybe_go_live(c.id);
@@ -361,56 +361,30 @@ begin
   if not public.is_staff(c.country_code, array['ops']) then raise exception 'not_allowed' using errcode = '42501'; end if;
   if coalesce(trim(p_reason), '') = '' then raise exception 'reason_required'; end if;
 
-  if p_action = 'pause' and c.status in ('live', 'scheduled') then
-    v_new := 'paused';
-    update public.campaigns set status = v_new, paused_by_hq = true, updated_at = now() where id = c.id;
-  elsif p_action = 'resume' and c.status = 'paused' and c.end_date >= current_date then
-    v_new := 'live';
-    update public.campaigns set status = v_new, paused_by_hq = false, updated_at = now() where id = c.id;
-  elsif p_action = 'terminate' and c.status in ('pending_review', 'changes_requested', 'approved_awaiting_payment', 'scheduled', 'live', 'paused') then
-    v_new := 'terminated';
-    update public.campaigns set status = v_new, updated_at = now() where id = c.id;
-    if not p_forfeit then perform public._release_unused(c.id); end if;
-  else
+  if not ((p_action = 'pause' and c.status in ('live', 'scheduled'))
+       or (p_action = 'resume' and c.status = 'paused' and c.end_date >= current_date)
+       or (p_action = 'terminate' and c.status in ('pending_review', 'changes_requested', 'approved_awaiting_payment', 'scheduled', 'live', 'paused'))) then
     raise exception 'action_not_allowed_in_status';
   end if;
 
+  -- log the decision first so the advertiser notification can quote the reason
   insert into public.moderation_cases (campaign_id, reviewer_id, decision, reason)
   values (c.id, auth.uid(), case p_action when 'pause' then 'paused' when 'terminate' then 'terminated' else 'approved' end, p_reason);
+
+  if p_action = 'pause' then
+    v_new := 'paused';
+    update public.campaigns set status = v_new, paused_by_hq = true, updated_at = now() where id = c.id;
+  elsif p_action = 'resume' then
+    v_new := 'live';
+    update public.campaigns set status = v_new, paused_by_hq = false, updated_at = now() where id = c.id;
+  else
+    v_new := 'terminated';
+    update public.campaigns set status = v_new, updated_at = now() where id = c.id;
+    if not p_forfeit then perform public._release_unused(c.id); end if;
+  end if;
   perform public.write_audit('campaign.' || p_action, 'campaign', c.id::text, c.country_code,
     jsonb_build_object('by', 'hq', 'forfeit', p_forfeit), p_reason);
   return v_new;
-end $$;
-
-create function public.hq_refund(p_invoice uuid, p_amount numeric, p_reason text, p_revoke_credit boolean default true) returns void
-language plpgsql security definer set search_path = public as $$
--- Cash refund or credit note. By default an equal amount of released credit is revoked so the money is not returned twice.
-declare i public.invoices; c public.campaigns; v_refunded numeric; v_balance numeric; v_revoke numeric;
-begin
-  select * into i from public.invoices where id = p_invoice for update;
-  if not found then raise exception 'invoice_not_found'; end if;
-  select * into c from public.campaigns where id = i.campaign_id;
-  if not public.is_staff(c.country_code, array['finance']) then raise exception 'not_allowed' using errcode = '42501'; end if;
-  if coalesce(trim(p_reason), '') = '' then raise exception 'reason_required'; end if;
-  if i.status not in ('verified', 'refund_due') then raise exception 'invoice_not_refundable'; end if;
-  if p_amount is null or p_amount <= 0 then raise exception 'invalid_amount'; end if;
-
-  select coalesce(sum(amount), 0) into v_refunded from public.payment_records where invoice_id = i.id and kind = 'refund';
-  if v_refunded + p_amount > i.total then raise exception 'refund_exceeds_invoice'; end if;
-
-  insert into public.payment_records (invoice_id, kind, amount, status, reference, created_by)
-  values (i.id, 'refund', p_amount, 'verified', p_reason, auth.uid());
-  if v_refunded + p_amount >= i.total then update public.invoices set status = 'refunded' where id = i.id; end if;
-
-  if p_revoke_credit then
-    v_balance := public._ad_balance(c.account_id);
-    v_revoke := least(p_amount, v_balance);
-    if v_revoke > 0 then
-      insert into public.ad_credits (account_id, amount, kind, campaign_id, reason, created_by)
-      values (c.account_id, -v_revoke, 'revoke', c.id, 'Refunded in cash: ' || p_reason, auth.uid());
-    end if;
-  end if;
-  perform public.write_audit('invoice.refund', 'invoice', i.id::text, c.country_code, jsonb_build_object('amount', p_amount), p_reason);
 end $$;
 
 create function public.hq_adjust_credit(p_account uuid, p_amount numeric, p_reason text) returns numeric
