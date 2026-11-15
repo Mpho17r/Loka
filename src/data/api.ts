@@ -1,6 +1,6 @@
 import type {
   Ad, Campaign, CampaignInput, HqData, NewProduct, NewService, Placement, Product, Profile, Quote, Service,
-  ServiceRequest, Verification, AppNotification, PickedImage,
+  ServiceRequest, Verification, AppNotification, PickedImage, AdFormat, Conversation, Message,
 } from '../types';
 
 export interface QuoteRequest {
@@ -8,6 +8,7 @@ export interface QuoteRequest {
   city: string;
   impressions: number;
   useCredit: boolean;
+  format: AdFormat;
 }
 
 export interface MineData {
@@ -64,6 +65,17 @@ export interface Api {
   registerPushToken(token: string, platform: string): Promise<void>;
   setDeliveryPrefs(prefs: { push?: boolean; email?: boolean }): Promise<void>;
 
+  // messaging between buyers and sellers
+  /** Finds or creates the conversation about a listing, optionally sending the first message. */
+  startConversation(type: 'product' | 'service', listingId: string, firstMessage?: string): Promise<string>;
+  loadConversations(): Promise<Conversation[]>;
+  loadMessages(conversationId: string): Promise<Message[]>;
+  sendMessage(conversationId: string, body: string): Promise<void>;
+  markConversationRead(conversationId: string): Promise<void>;
+  blockUser(userId: string): Promise<void>;
+  unblockUser(userId: string): Promise<void>;
+  reportMessage(messageId: string, reason: string): Promise<void>;
+
   // Promote: advertiser
   quote(req: QuoteRequest, profile: Profile, balance: number): Promise<Quote>;
   createCampaign(input: CampaignInput, profile: Profile, balance: number): Promise<string>;
@@ -87,6 +99,11 @@ export interface Api {
   /** Refunds above the country's limit return 'pending_approval' and need a second finance user. */
   hqRefund(invoiceId: string, amount: number, reason: string): Promise<'refunded' | 'pending_approval'>;
   hqDecideRefund(requestId: string, approve: boolean, reason: string): Promise<void>;
+  /** HQ looked at a flagged file and says it is fine. */
+  hqClearScan(campaignId: string, reason: string): Promise<void>;
+  /** HQ bans a file so the same file is flagged in future. */
+  hqBlockMedia(campaignId: string, reason: string): Promise<void>;
+  hqResolveMessageReport(reportId: string, status: 'actioned' | 'dismissed', resolution: string): Promise<void>;
   hqUpdateManaged(requestId: string, status: 'in_progress' | 'campaign_created' | 'declined'): Promise<void>;
   hqSetFlags(userId: string, flags: { verification?: Verification; premium?: boolean }, reason: string): Promise<void>;
 }

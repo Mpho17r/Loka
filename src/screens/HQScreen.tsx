@@ -1,4 +1,4 @@
-import { AdImage, ProofLink } from '../components/media';
+import { AdMedia, ProofLink, ScanBadge } from '../components/media';
 import React, { useEffect, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { Button, Card, ChipRow, Empty, Field, H2, Muted, Row, Screen, StatusPill } from '../components/ui';
@@ -8,7 +8,7 @@ import { useApp } from '../store/AppState';
 import { statusTone } from './CampaignDetailScreen';
 import type { Campaign, Verification } from '../types';
 
-const SECTIONS = ['Review', 'Payments', 'Live', 'Finance', 'Complaints', 'Accounts', 'Managed', 'Revenue'];
+const SECTIONS = ['Review', 'Payments', 'Live', 'Finance', 'Complaints', 'Messages', 'Accounts', 'Managed', 'Revenue'];
 const label = (id: string) => PLACEMENTS.find((p) => p.id === id)?.label ?? id;
 
 /**
@@ -46,7 +46,8 @@ export default function HQScreen() {
     <View>
       <Text style={{ fontWeight: '700', color: colors.ink }}>{c.headline}</Text>
       <Muted>{c.advertiser ?? 'Advertiser'} · {c.targetTitle}</Muted>
-      <AdImage path={c.mediaPath} height={140} />
+      <AdMedia path={c.mediaPath} format={c.format} height={160} />
+      <ScanBadge scan={c.scan} />
       <Muted>{label(c.placement)} · {c.city} · {c.impressions.toLocaleString('en-ZA')} impressions · {c.startDate} to {c.endDate}</Muted>
       <View style={{ marginVertical: 6, flexDirection: 'row', gap: 8 }}>
         <StatusPill label={c.status} tone={statusTone(c.status)} />
@@ -77,6 +78,12 @@ export default function HQScreen() {
             <Card key={c.id}>
               {header(c)}
               <View style={{ gap: 8 }}>
+                {c.scan?.status === 'flagged' ? (
+                  <Button label="Clear the media flag (I looked at the file)" variant="secondary" onPress={() => need() && act(() => api.hqClearScan(c.id, reason))} />
+                ) : null}
+                {c.scan && c.scan.status !== 'flagged' ? (
+                  <Button label="Block this file for good" variant="secondary" onPress={() => need() && act(() => api.hqBlockMedia(c.id, reason))} />
+                ) : null}
                 <Button label="Approve" onPress={() => act(() => api.hqReview(c.id, 'approve', 'policy-ok', reason), false)} />
                 <Button label="Request changes" variant="secondary" onPress={() => need() && act(() => api.hqReview(c.id, 'changes', 'needs-change', reason))} />
                 <Button label="Reject" variant="danger" onPress={() => need() && act(() => api.hqReview(c.id, 'reject', 'policy-breach', reason))} />
@@ -175,6 +182,29 @@ export default function HQScreen() {
                   <Button label="Dismiss" variant="secondary" onPress={() => need() && act(() => api.hqResolveReport(r.id, 'dismissed', reason))} />
                 </View>
               ) : null}
+            </Card>
+          ))}
+        </View>
+      ) : null}
+
+      {section === 'Messages' ? (
+        <View>
+          <H2>Reported messages ({hq.messageReports.length})</H2>
+          <Muted style={{ marginBottom: 8 }}>You see only the reported message and the few before it. Conversations are private otherwise.</Muted>
+          {hq.messageReports.length === 0 ? <Empty title="No reports" body="Reported messages appear here." /> : null}
+          {hq.messageReports.map((r) => (
+            <Card key={r.id}>
+              <Text style={{ fontWeight: '700', color: colors.ink }}>{r.reporterName} reported {r.reportedName}</Text>
+              <Muted style={{ marginVertical: 4 }}>Reason: {r.reason}</Muted>
+              {r.context.map((m, i) => (
+                <Text key={i} style={{ color: m.fromReported ? colors.danger : colors.ink, marginVertical: 1 }}>
+                  {m.fromReported ? r.reportedName : r.reporterName}: {m.body}
+                </Text>
+              ))}
+              <View style={{ gap: 8, marginTop: 8 }}>
+                <Button label="Action taken" variant="secondary" onPress={() => need() && act(() => api.hqResolveMessageReport(r.id, 'actioned', reason))} />
+                <Button label="Dismiss" variant="secondary" onPress={() => need() && act(() => api.hqResolveMessageReport(r.id, 'dismissed', reason))} />
+              </View>
             </Card>
           ))}
         </View>

@@ -49,6 +49,13 @@ export interface Service {
 /** An image chosen from the phone's library, ready to upload. */
 export interface PickedImage { uri: string; mime: string; base64: string; bytes: number }
 
+/** A short video chosen from the phone's library. Uploaded from its file address, not held in memory as text. */
+export interface PickedVideo { uri: string; mime: string; bytes: number; durationMs: number }
+export type AdFormat = 'image' | 'video';
+
+export type ScanStatus = 'pending' | 'passed' | 'flagged' | 'error';
+export interface MediaScan { status: ScanStatus; reasons: string[]; clearedReason?: string }
+
 export type Placement = 'homepage' | 'search' | 'category' | 'listing';
 
 export type CampaignStatus =
@@ -98,6 +105,8 @@ export interface Campaign {
   targetTitle: string;
   headline: string;
   mediaPath?: string;
+  format: AdFormat;
+  scan?: MediaScan;
   placement: Placement;
   city: string; // 'All cities' for national
   impressions: number;
@@ -118,6 +127,7 @@ export interface Ad {
   headline: string;
   description: string;
   mediaPath?: string;
+  format: AdFormat;
   targetType: 'product' | 'service';
   targetId: string;
   placement: Placement;
@@ -133,7 +143,9 @@ export interface CampaignInput {
   impressions: number;
   days: number;
   useCredit: boolean;
+  format: AdFormat;
   media?: PickedImage;
+  video?: PickedVideo;
 }
 
 export type RequestStatus = 'Submitted' | 'Under review' | 'Quoted' | 'Accepted' | 'Completed' | 'Cancelled';
@@ -189,6 +201,7 @@ export interface AppNotification {
   read: boolean;
   createdAt: string;
   campaignId?: string;
+  conversationId?: string;
 }
 
 export interface HqRefund {
@@ -199,7 +212,36 @@ export interface HqRefund {
   requestedByMe: boolean;
 }
 
+export interface Conversation {
+  id: string;
+  listingType: 'product' | 'service';
+  listingId: string;
+  listingTitle: string;
+  otherName: string;
+  otherUserId: string;
+  lastPreview: string;
+  lastAt: string;
+  unread: boolean;
+  blockedByMe: boolean;
+}
+
+export interface Message {
+  id: string;
+  mine: boolean;
+  body: string;
+  createdAt: string;
+}
+
+export interface HqMessageReport {
+  id: string;
+  reason: string;
+  reporterName: string;
+  reportedName: string;
+  context: { fromReported: boolean; body: string; at: string }[];
+}
+
 export interface HqData {
+  messageReports: HqMessageReport[];
   refunds: HqRefund[];
   managed: HqManaged[];
   campaigns: Campaign[];

@@ -1,4 +1,4 @@
-import type { Placement, Quote } from '../types';
+import type { AdFormat, Placement, Quote } from '../types';
 
 /**
  * Loka Promote pricing engine.
@@ -30,18 +30,27 @@ export interface QuoteInput {
   impressions: number;
   isPremium: boolean;
   creditBalance: number;
+  format?: AdFormat;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export function cpmFor(placement: Placement): number {
+/** Video is sold only on Home and Category (same as the seed price book). Test prices. */
+export const VIDEO_CPM: Partial<Record<Placement, number>> = { homepage: 90, category: 45 };
+
+export function cpmFor(placement: Placement, format: AdFormat = 'image'): number {
   const p = PLACEMENTS.find((x) => x.id === placement);
   if (!p) throw new Error(`Unknown placement: ${placement}`);
+  if (format === 'video') {
+    const v = VIDEO_CPM[placement];
+    if (v === undefined) throw new Error('no_price_for_placement');
+    return v;
+  }
   return p.cpm;
 }
 
 export function calculateQuote(input: QuoteInput): Quote {
-  const cpm = cpmFor(input.placement);
+  const cpm = cpmFor(input.placement, input.format);
   const impressions = Math.max(0, Math.floor(input.impressions));
   const geoMultiplier = input.city === ALL_CITIES ? GEO_MULTIPLIER_NATIONAL : GEO_MULTIPLIER_CITY;
 

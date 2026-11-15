@@ -38,11 +38,13 @@ export default function ProductDetailScreen() {
         </Muted>
       </Card>
 
-      <Button
-        label="Send enquiry to seller"
-        onPress={() => Alert.alert('Enquiry sent', `${p.seller} will reply in your messages. (Prototype: messaging is not connected yet.)`)}
-        style={{ marginBottom: 10 }}
-      />
+      {!profile || p.ownerId !== profile.id ? (
+        <Button
+          label="Message seller"
+          onPress={() => (profile ? nav.navigate('Chat', { listingType: 'product', listingId: p.id, title: p.seller }) : Alert.alert('Sign in needed', 'Please sign in from the Account tab to message the seller.'))}
+          style={{ marginBottom: 10 }}
+        />
+      ) : null}
       {canPromote ? (
         <Button
           label="Promote this product"

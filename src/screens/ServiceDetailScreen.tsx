@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Alert, Text } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Empty, H1, Muted, Row, Screen, VerifiedBadge } from '../components/ui';
@@ -50,6 +50,14 @@ export default function ServiceDetailScreen() {
         </Muted>
       </Card>
 
+      {!s.providedByLoka && (!profile || s.ownerId !== profile.id) ? (
+        <Button
+          label="Message provider"
+          variant="secondary"
+          onPress={() => (profile ? nav.navigate('Chat', { listingType: 'service', listingId: s.id, title: s.provider }) : Alert.alert('Sign in needed', 'Please sign in from the Account tab to message the provider.'))}
+          style={{ marginBottom: 10 }}
+        />
+      ) : null}
       <Button label="Request a quotation" onPress={() => nav.navigate('RequestQuote', { serviceId: s.id })} style={{ marginBottom: 10 }} />
       {canPromote ? (
         <Button

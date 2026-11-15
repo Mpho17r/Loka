@@ -1,7 +1,7 @@
 import type { Api, HqDecision, ListingFilter, MineData, Page, QuoteRequest } from './api';
 import { getViewerKey, supabase } from '../lib/supabase';
 import { ALL_CITIES } from '../lib/pricing';
-import { uploadImage } from '../lib/media';
+import { uploadImage, uploadVideo } from '../lib/media';
 import { mapCampaign, mapProduct, mapProfile, mapQuote, mapRequest, mapService } from '../lib/mappers';
 import type { Ad, AppNotification, Campaign, HqData, HqReport, Placement, Product, Quote } from '../types';
 
@@ -25,7 +25,7 @@ const utcDate = (offsetDays = 0) => {
   return d.toISOString().slice(0, 10);
 };
 
-const CAMPAIGN_SELECT = '*, quotes(*), invoices(*), campaign_revisions(*)';
+const CAMPAIGN_SELECT = '*, quotes(*), invoices(*), campaign_revisions(*, media_scans(*))';
 
 async function titleLookup(rows: Row[]): Promise<(type: 'product' | 'service', id: string) => string> {
   const sb = client();
@@ -164,9 +164,56 @@ export const supabaseApi: Api = {
     const rows = ok<Row[]>(await client().from('notifications').select('*').order('created_at', { ascending: false }).limit(50));
     return rows.map((n) => ({
       id: n.id, title: n.title, body: n.body ?? '', read: !!n.read, createdAt: String(n.created_at).slice(0, 10),
-      campaignId: n.campaign_id ?? undefined,
+      campaignId: n.campaign_id ?? undefined, conversationId: n.conversation_id ?? undefined,
     }));
   },
+
+  async startConversation(type, listingId, firstMessage) {
+    return ok<string>(await client().rpc('start_conversation', { p_type: type, p_listing: listingId, p_first: firstMessage ?? null }));
+  },
+
+  async loadConversations() {
+    const sb = client();
+    const { data } = await sb.auth.getUser();
+    const me = data.user?.id;
+    if (!me) return [];
+    const rows = ok<Row[]>(await sb.from('conversations').select('*').order('last_message_at', { ascending: false }).limit(100));
+    const blocks = ok<Row[]>(await sb.from('user_blocks').select('blocked_id'));
+    const blocked = new Set(blocks.map((b) => b.blocked_id));
+    return rows.map((c) => {
+      const iAmBuyer = c.buyer_id === me;
+      const otherUserId = iAmBuyer ? c.seller_id : c.buyer_id;
+      const myRead = Date.parse(iAmBuyer ? c.buyer_read_at : c.seller_read_at);
+      return {
+        id: c.id, listingType: c.listing_type, listingId: c.listing_id, listingTitle: c.listing_title,
+        otherName: (iAmBuyer ? c.seller_name : c.buyer_name) || 'User', otherUserId,
+        lastPreview: c.last_preview ?? '', lastAt: String(c.last_message_at),
+        unread: !!c.last_sender_id && c.last_sender_id !== me && Date.parse(c.last_message_at) > myRead,
+        blockedByMe: blocked.has(otherUserId),
+      };
+    });
+  },
+
+  async loadMessages(conversationId) {
+    const sb = client();
+    const { data } = await sb.auth.getUser();
+    const me = data.user?.id;
+    const rows = ok<Row[]>(await sb.from('messages').select('*').eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(300));
+    return rows.reverse().map((m) => ({ id: m.id, mine: m.sender_id === me, body: m.body, createdAt: String(m.created_at) }));
+  },
+
+  async sendMessage(conversationId, body) {
+    ok(await client().rpc('send_message', { p_conv: conversationId, p_body: body }));
+  },
+
+  async markConversationRead(conversationId) {
+    ok(await client().rpc('mark_conversation_read', { p_conv: conversationId }));
+  },
+
+  async blockUser(userId) { ok(await client().rpc('block_user', { p_user: userId })); },
+  async unblockUser(userId) { ok(await client().rpc('unblock_user', { p_user: userId })); },
+  async reportMessage(messageId, reason) { ok(await client().rpc('report_message', { p_message: messageId, p_reason: reason })); },
 
   async registerPushToken(token, platform) {
     const { data } = await client().auth.getUser();
@@ -193,7 +240,7 @@ export const supabaseApi: Api = {
 
   async quote(req: QuoteRequest, profile, balance): Promise<Quote> {
     const q = ok<Row>(await client().rpc('compute_quote', {
-      p_country: profile.countryCode, p_placement: req.placement, p_format: 'image',
+      p_country: profile.countryCode, p_placement: req.placement, p_format: req.format,
       p_city: req.city === ALL_CITIES ? null : req.city, p_impressions: req.impressions,
       p_is_premium: profile.isPremium, p_credit: req.useCredit ? balance : 0, p_fee: 0,
     }));
@@ -201,10 +248,13 @@ export const supabaseApi: Api = {
   },
 
   async createCampaign(input, profile, _balance) {
-    const mediaPath = input.media ? await uploadImage('ad-media', profile.id, input.media) : null;
+    if (input.format === 'video' && !input.video) throw new Error('video_required');
+    const mediaPath = input.format === 'video' && input.video
+      ? await uploadVideo(profile.id, input.video)
+      : input.media ? await uploadImage('ad-media', profile.id, input.media) : null;
     const id = ok<string>(await client().rpc('create_campaign', {
       p_target_type: input.targetType, p_target_id: input.targetId, p_headline: input.headline, p_description: '',
-      p_cta: 'View', p_placement: input.placement, p_format: 'image',
+      p_cta: 'View', p_placement: input.placement, p_format: input.format,
       p_city: input.city === ALL_CITIES ? null : input.city, p_impressions: input.impressions,
       p_start: utcDate(0), p_end: utcDate(input.days - 1), p_use_credit: input.useCredit, p_accept_terms: true, p_media_path: mediaPath,
     }));
@@ -237,7 +287,7 @@ export const supabaseApi: Api = {
       p_placement: placement, p_city: city === ALL_CITIES ? null : city, p_viewer_key: await getViewerKey(), p_limit: 1,
     }));
     return rows.map((r) => ({
-      campaignId: r.campaign_id, headline: r.headline, description: r.description ?? '', mediaPath: r.media_path ?? undefined,
+      campaignId: r.campaign_id, headline: r.headline, description: r.description ?? '', mediaPath: r.media_path ?? undefined, format: r.format === 'video' ? 'video' : 'image',
       targetType: r.target_type, targetId: r.target_id, placement: r.placement,
     }));
   },
@@ -290,11 +340,16 @@ export const supabaseApi: Api = {
       id: m.id, requester: nameById.get(m.requester_id) ?? 'Advertiser', brief: m.brief,
       budget: m.budget === null ? undefined : Number(m.budget), status: m.status,
     }));
+    const mr = await sb.from('message_reports').select('*').eq('status', 'open').order('created_at', { ascending: false }).limit(100);
+    const messageReports = mr.error ? [] : (mr.data as Row[]).map((r) => ({
+      id: r.id, reason: r.reason, reporterName: r.reporter_name || 'User', reportedName: r.reported_name || 'User',
+      context: ((r.context ?? []) as Row[]).map((c) => ({ fromReported: !!c.from_reported, body: String(c.body), at: String(c.at) })),
+    }));
     const rr = await sb.from('refund_requests').select('*, invoices(number)').eq('status', 'pending').order('created_at', { ascending: false });
     const refunds = rr.error ? [] : (rr.data as Row[]).map((r) => ({
       id: r.id, invoiceNumber: r.invoices?.number ?? '', amount: Number(r.amount), reason: r.reason, requestedByMe: r.requested_by === profile.id,
     }));
-    return { campaigns, reports, revenue, accounts, managed, refunds };
+    return { campaigns, reports, revenue, accounts, managed, refunds, messageReports };
   },
 
   async hqReview(campaignId, decision: HqDecision, rule, reason) {
@@ -330,6 +385,18 @@ export const supabaseApi: Api = {
 
   async hqUpdateManaged(requestId, status) {
     ok(await client().rpc('hq_update_managed_request', { p_request: requestId, p_status: status, p_assigned_to: null }));
+  },
+
+  async hqClearScan(campaignId, reason) {
+    ok(await client().rpc('hq_clear_media_scan', { p_campaign: campaignId, p_reason: reason }));
+  },
+
+  async hqBlockMedia(campaignId, reason) {
+    ok(await client().rpc('hq_block_media', { p_campaign: campaignId, p_reason: reason }));
+  },
+
+  async hqResolveMessageReport(reportId, status, resolution) {
+    ok(await client().rpc('hq_resolve_message_report', { p_report: reportId, p_status: status, p_resolution: resolution }));
   },
 
   async hqSetFlags(userId, flags, reason) {

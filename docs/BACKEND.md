@@ -60,9 +60,36 @@ Unregistered phones are removed from `push_tokens`.
 4. For push, build the app with EAS (`eas init` adds `extra.eas.projectId` to `app.json`). Push tokens do not work in Expo Go
    on recent SDKs and need a real device.
 
+## Media check (scan-media)
+
+`supabase/functions/scan-media` runs when a creative with a file is saved (a row appears in `media_scans`) and records the
+result with `record_media_scan`, which only the service key may call. A flagged result blocks approval (`media_flagged`);
+HQ can clear it after looking (`hq_clear_media_scan`, needs a reason and is audited) or ban the file
+(`hq_block_media`), after which the same file is flagged on any later upload.
+
+1. `supabase functions deploy scan-media --no-verify-jwt`
+2. `supabase secrets set WEBHOOK_SECRET=<long random text>`
+3. Database > Webhooks: table `media_scans`, event Insert, Edge Function `scan-media`, header `x-webhook-secret`.
+4. To make approval wait for a passed check: `update promote_settings set require_media_scan = true where country_code = 'ZA';`
+
+The function checks the file itself. To judge **content**, set `MODERATION_URL` (and optionally `MODERATION_TOKEN`) to a small
+service of yours that wraps a provider such as Google Vision SafeSearch, AWS Rekognition or Sightengine. The function sends
+`POST {url, kind: 'image'|'video', extension}` with `Authorization: Bearer <token>` and expects `{ "flagged": true|false,
+"reasons": ["..."] }`. Any other answer is recorded as an `error`, never as a pass. Videos need your service to sample frames.
+Without it, passes carry the note `no_content_classifier`. Statuses: `pending`, `passed`, `flagged`, `error`.
+
+## Messaging
+
+Conversations are one per buyer per listing. Nobody writes to `conversations` or `messages` directly: `start_conversation`,
+`send_message`, `mark_conversation_read`, `block_user`, `unblock_user` and `report_message` do it and check who is calling.
+Blocking works in both directions. A report copies the reported message and the five before it, so HQ (ops and support
+of that country) sees only that, never the whole conversation. New-message alerts reuse `notifications` and the
+send-notifications function, one unread alert per conversation. The app checks for new messages every 5 seconds while a
+chat is open; Supabase Realtime on `messages` would make it instant.
+
 ## Images
 
-Adverts upload to the public `ad-media` bucket and payment proofs to the private `payment-proofs` bucket, always under a
+Adverts (images up to 5 MB, videos up to 25 MB) upload to the public `ad-media` bucket, which also enforces the size and type limits, and payment proofs to the private `payment-proofs` bucket, always under a
 folder named after the user's id. HQ opens proofs through signed links that expire after 5 minutes. Advert images are
 publicly readable by address from the moment of upload, before review; the addresses are random and unlisted.
 

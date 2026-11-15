@@ -1,4 +1,4 @@
-import { AdImage, ImagePickerField } from '../components/media';
+import { AdMedia, ImagePickerField, ScanBadge } from '../components/media';
 import React, { useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
@@ -52,7 +52,9 @@ export default function CampaignDetailScreen() {
       <View style={{ marginBottom: 8 }}><StatusPill label={c.status} tone={statusTone(c.status)} /></View>
       {STATUS_HELP[c.status] ? <Muted style={{ marginBottom: 12 }}>{STATUS_HELP[c.status]}</Muted> : null}
 
-      <AdImage path={c.mediaPath} height={160} />
+      <AdMedia path={c.mediaPath} format={c.format} height={180} />
+      {c.scan && c.scan.status !== 'passed' ? <ScanBadge scan={c.scan} /> : null}
+      {c.scan?.status === 'flagged' ? <Muted>Our automatic check flagged your file. Saccharum will look at it before deciding. You may be asked for a different one.</Muted> : null}
       <H2>Performance</H2>
       <Card>
         <Row label="Impressions" value={`${c.delivered.toLocaleString('en-ZA')} of ${c.impressions.toLocaleString('en-ZA')}`} />

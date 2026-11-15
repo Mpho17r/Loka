@@ -1,6 +1,6 @@
 import { ALL_CITIES } from './pricing';
 import type {
-  Campaign, CampaignStatus, Invoice, Placement, Product, Profile, Quote, Role, Service, ServiceRequest, Verification,
+  AdFormat, Campaign, CampaignStatus, MediaScan, Invoice, Placement, Product, Profile, Quote, Role, Service, ServiceRequest, Verification,
 } from '../types';
 
 // Loosely typed database rows: the shapes are defined by supabase/migrations.
@@ -76,12 +76,19 @@ export function mapCampaign(c: Row, titleFor: (type: 'product' | 'service', id: 
   const invoice: Invoice = { id: inv.id, number: inv.number, status: inv.status, total: num(inv.total), proofPath: inv.proof_path ?? undefined };
   return {
     id: c.id, accountId: c.account_id, advertiser, targetType: c.target_type, targetId: c.target_id,
-    targetTitle: titleFor(c.target_type, c.target_id), headline: live?.headline ?? '', mediaPath: live?.media_path ?? undefined,
+    targetTitle: titleFor(c.target_type, c.target_id), headline: live?.headline ?? '', mediaPath: live?.media_path ?? undefined, format: (c.format as AdFormat) ?? 'image', scan: mapScan(live),
     placement: c.placement as Placement, city: c.city ?? ALL_CITIES, impressions: c.impressions_bought,
     delivered: c.impressions_delivered, clicks: c.clicks, days: dayDiff(c.start_date, c.end_date),
     startDate: c.start_date, endDate: c.end_date, status: statusLabel(c.status), pausedByHq: !!c.paused_by_hq,
     quote: mapQuote(quote), invoice, createdAt: String(c.created_at).slice(0, 10),
   };
+}
+
+export function mapScan(rev: Row | undefined): MediaScan | undefined {
+  const raw = rev?.media_scans;
+  const s: Row | undefined = Array.isArray(raw) ? raw[0] : raw ?? undefined;
+  if (!s) return undefined;
+  return { status: s.status, reasons: s.reasons ?? [], clearedReason: s.cleared_reason ?? undefined };
 }
 
 export function mapRequest(r: Row): ServiceRequest {

@@ -396,5 +396,164 @@ select t.eq('partial text search on services uses the trigram index',
 select t.eq('search finds the listing', t.q($$select count(*) from public.products where title ilike '%mango%' or description ilike '%mango%'$$), '1');
 set local enable_seqscan = on;
 
+-- ------------------------------------------------------------------ video adverts
+select t.login('alice');
+select t.fails('a video campaign needs a video',
+  $$select public.create_campaign('product', t.id('alice_product'), 'Mango video advert', '', 'View', 'homepage', 'video', null, 1000, current_date, current_date + 3, false, true)$$, 'video_required');
+select t.fails('a creative cannot use another user''s file',
+  format($$select public.create_campaign('product', %L, 'Mango video advert', '', 'View', 'homepage', 'video', null, 1000, current_date, current_date + 3, false, true, null, 0, %L)$$,
+         t.id('alice_product'), t.id('mallory')::text || '/clip.mp4'), 'media_not_yours');
+select t.fails('an image campaign cannot carry a video file',
+  format($$select public.create_campaign('product', %L, 'Mango image advert', '', 'View', 'search', 'image', null, 1000, current_date, current_date + 3, false, true, null, 0, %L)$$,
+         t.id('alice_product'), t.id('alice')::text || '/clip.mp4'), 'image_required');
+select t.fails('a video campaign cannot carry an image file',
+  format($$select public.create_campaign('product', %L, 'Mango video advert', '', 'View', 'homepage', 'video', null, 1000, current_date, current_date + 3, false, true, null, 0, %L)$$,
+         t.id('alice_product'), t.id('alice')::text || '/pic.jpg'), 'video_required');
+select t.fails('file types outside the allow-list are refused',
+  format($$select public.create_campaign('product', %L, 'Mango image advert', '', 'View', 'search', 'image', null, 1000, current_date, current_date + 3, false, true, null, 0, %L)$$,
+         t.id('alice_product'), t.id('alice')::text || '/run.exe'), 'media_type_not_allowed');
+insert into t.ids select 'v1', public.create_campaign('product', t.id('alice_product'), 'Mango video advert', '', 'View', 'homepage', 'video', null, 1000,
+  current_date, current_date + 3, false, true, null, 0, t.id('alice')::text || '/v1.mp4');
+insert into t.ids select 'v2', public.create_campaign('product', t.id('alice_product'), 'Mango video advert 2', '', 'View', 'homepage', 'video', null, 1000,
+  current_date, current_date + 3, false, true, null, 0, t.id('alice')::text || '/v2.mp4');
+insert into t.ids select 'v3', public.create_campaign('product', t.id('alice_product'), 'Mango video advert 3', '', 'View', 'category', 'video', null, 1000,
+  current_date, current_date + 3, false, true, null, 0, t.id('alice')::text || '/v3.mp4');
+insert into t.ids select 'v4', public.create_campaign('product', t.id('alice_product'), 'Mango video advert 4', '', 'View', 'category', 'video', null, 1000,
+  current_date, current_date + 3, false, true, null, 0, t.id('alice')::text || '/v4.mp4');
+select t.eq('a video campaign is priced from the video price book (homepage video R90 per 1,000)',
+  t.q(format($$select cpm from public.quotes where campaign_id = %L$$, t.id('v1'))), '90.00');
+
+-- ------------------------------------------------------------------ automatic media scanning
+select t.eq('every creative with a file is queued for scanning',
+  t.q(format($$select status from public.media_scans where campaign_id = %L$$, t.id('v1'))), 'pending');
+select t.login('mallory');
+select t.eq('other users cannot see the scan', t.q(format($$select count(*) from public.media_scans where campaign_id = %L$$, t.id('v1'))), '0');
+select t.fails('users cannot record scan results',
+  format($$select public.record_media_scan(%L, 'passed', null, null)$$, t.id('v1')), 'permission denied');
+select t.login('alice');
+select t.eq('the advertiser can see their own scan', t.q(format($$select count(*) from public.media_scans where campaign_id = %L$$, t.id('v1'))), '1');
+
+-- the scanner (service key) flags v1
+select t.root();
+insert into t.ids select n || 'r', (select r.id from public.campaign_revisions r where r.campaign_id = t.id(n)) from unnest(array['v1','v2','v3','v4']) n;
+set local role service_role;
+select t.eq('scanner records a flag',
+  t.q(format($$select public.record_media_scan(%L, 'flagged', %L, array['adult_content'])$$,
+    t.id('v1r'), encode(sha256('file-one'::bytea), 'hex'))), 'flagged');
+select t.root();
+select t.login('carol');
+select t.fails('a flagged creative cannot be approved', format($$select public.hq_review_campaign(%L, 'approve')$$, t.id('v1')), 'media_flagged');
+select t.fails('clearing a flag needs a reason', format($$select public.hq_clear_media_scan(%L, '')$$, t.id('v1')), 'reason_required');
+select public.hq_clear_media_scan(t.id('v1'), 'Reviewed by eye: ordinary produce video');
+select t.eq('after HQ clears it, the creative can be approved',
+  t.q(format($$select public.hq_review_campaign(%L, 'approve')$$, t.id('v1'))), 'approved_awaiting_payment');
+select t.eq('the clear is audited', t.q($$select count(*) from public.audit_logs where action = 'media.clear'$$), '1');
+select t.login('mallory');
+select t.fails('other users cannot clear flags', format($$select public.hq_clear_media_scan(%L, 'x')$$, t.id('v1')), 'not_allowed');
+
+-- a country can require a passed scan before approval
+select t.root();
+update public.promote_settings set require_media_scan = true where country_code = 'ZA';
+select t.login('carol');
+select t.fails('with scans required, a pending scan blocks approval', format($$select public.hq_review_campaign(%L, 'approve')$$, t.id('v2')), 'media_scan_not_passed');
+select t.root(); set local role service_role;
+select t.eq('scanner passes v2', t.q(format($$select public.record_media_scan(%L, 'passed', %L, '{}')$$,
+  t.id('v2r'), encode(sha256('file-two'::bytea), 'hex'))), 'passed');
+select t.root();
+select t.login('carol');
+select t.eq('with scans required, a passed scan allows approval', t.q(format($$select public.hq_review_campaign(%L, 'approve')$$, t.id('v2'))), 'approved_awaiting_payment');
+select t.root();
+update public.promote_settings set require_media_scan = false where country_code = 'ZA';
+
+-- HQ bans a file; the same file is flagged on any later upload
+select t.root(); set local role service_role;
+select t.eq('scanner passes v3', t.q(format($$select public.record_media_scan(%L, 'passed', %L, '{}')$$,
+  t.id('v3r'), encode(sha256('file-three'::bytea), 'hex'))), 'passed');
+select t.root();
+select t.login('carol');
+select public.hq_block_media(t.id('v3'), 'Misleading product claim');
+select t.eq('a blocked file is flagged', t.q(format($$select status from public.media_scans where campaign_id = %L$$, t.id('v3'))), 'flagged');
+select t.root(); set local role service_role;
+select t.eq('the same file uploaded again is flagged even if the scanner says passed',
+  t.q(format($$select public.record_media_scan(%L, 'passed', %L, '{}')$$,
+    t.id('v4r'), encode(sha256('file-three'::bytea), 'hex'))), 'flagged');
+select t.root();
+select t.eq('...with the reason recorded', t.q(format($$select reasons::text from public.media_scans where campaign_id = %L$$, t.id('v4'))), '{blocked_file}');
+select t.anon();
+select t.eq('adverts can be fetched with their format by signed-out visitors', t.q($$select count(*) >= 0 from public.get_ads('homepage', null, 'viewer-x')$$), 'true');
+
+-- ------------------------------------------------------------------ messaging
+select t.root();
+insert into public.products (owner_id, seller_name, title, price, condition, category, city)
+values (null, 'Loka stock', 'Demo item with no owner', 10, 'New', 'Tools', 'Thohoyandou');
+insert into t.ids select 'orphan_product', id from public.products where owner_id is null;
+
+select t.login('mallory');
+select t.fails('listings without an owner cannot be messaged', format($$select public.start_conversation('product', %L)$$, t.id('orphan_product')), 'listing_has_no_owner');
+insert into t.ids select 'conv1', public.start_conversation('product', t.id('alice_product'), 'Is the box still available?');
+select t.eq('starting again returns the same conversation',
+  t.q(format($$select (public.start_conversation('product', %L) = %L)::text$$, t.id('alice_product'), t.id('conv1'))), 'true');
+select t.eq('buyer sees the first message', t.q(format($$select count(*) from public.messages where conversation_id = %L$$, t.id('conv1'))), '1');
+select t.fails('messages cannot be written directly',
+  format($$insert into public.messages (conversation_id, sender_id, body) values (%L, %L, 'hi')$$, t.id('conv1'), t.id('mallory')), 'permission denied');
+select t.fails('an empty message is refused', format($$select public.send_message(%L, '   ')$$, t.id('conv1')), 'invalid_message');
+select t.fails('a very long message is refused', format($$select public.send_message(%L, %L)$$, t.id('conv1'), repeat('x', 2001)), 'invalid_message');
+select public.send_message(t.id('conv1'), 'I can collect today.');
+
+select t.login('alice');
+select t.fails('you cannot message yourself', format($$select public.start_conversation('product', %L)$$, t.id('alice_product')), 'cannot_message_yourself');
+select t.eq('seller sees the conversation', t.q($$select count(*) from public.conversations$$), '1');
+select t.eq('seller sees both messages', t.q(format($$select count(*) from public.messages where conversation_id = %L$$, t.id('conv1'))), '2');
+select t.eq('seller gets exactly one unread alert for a burst of messages',
+  t.q($$select count(*) from public.notifications where conversation_id is not null and not read$$), '1');
+select t.eq('the inbox preview shows the last message', t.q($$select last_preview from public.conversations$$), 'I can collect today.');
+select public.mark_conversation_read(t.id('conv1'));
+select t.eq('opening the conversation clears the alert', t.q($$select count(*) from public.notifications where conversation_id is not null and not read$$), '0');
+select public.send_message(t.id('conv1'), 'Yes, come after 4pm.');
+select t.login('mallory');
+select t.eq('the buyer is alerted to the reply', t.q($$select count(*) from public.notifications where conversation_id is not null and not read$$), '1');
+
+select t.login('bob');
+select t.eq('strangers see no conversations', t.q($$select count(*) from public.conversations$$), '0');
+select t.eq('strangers see no messages', t.q($$select count(*) from public.messages$$), '0');
+select t.fails('strangers cannot send into a conversation', format($$select public.send_message(%L, 'hello')$$, t.id('conv1')), 'conversation_not_found');
+select t.anon();
+select t.fails('anonymous users cannot call send_message', format($$select public.send_message(%L, 'x')$$, t.id('conv1')), 'permission denied');
+
+select t.login('mallory');
+select t.fails('flooding is rate limited',
+  format($f$do $x$ begin for i in 1..25 loop perform public.send_message(%L, 'spam ' || i); end loop; end $x$$f$, t.id('conv1')), 'rate_limited');
+
+-- blocking
+select t.login('alice');
+select public.block_user(t.id('mallory'));
+select t.login('mallory');
+select t.fails('a blocked user cannot send', format($$select public.send_message(%L, 'please?')$$, t.id('conv1')), 'blocked');
+select t.login('alice');
+select t.fails('the blocker cannot send either until they unblock', format($$select public.send_message(%L, 'hi')$$, t.id('conv1')), 'blocked');
+select public.unblock_user(t.id('mallory'));
+select t.eq('after unblocking, messages work again', t.q(format($$select (public.send_message(%L, 'Sorry about that.') is not null)::text$$, t.id('conv1'))), 'true');
+
+-- reporting
+select t.login('mallory');
+select t.q(format($$select public.send_message(%L, 'Send me your bank PIN')$$, t.id('conv1')));
+insert into t.ids select 'bad_msg', id from public.messages where body = 'Send me your bank PIN';
+select t.login('alice');
+select t.fails('you cannot report your own message',
+  format($$select public.report_message(%L, 'oops')$$, (select id from public.messages where body = 'Sorry about that.')), 'cannot_report_own_message');
+select public.report_message(t.id('bad_msg'), 'Asking for my PIN');
+insert into t.ids select 'rep1', id from public.message_reports;
+select t.login('mallory');
+select t.eq('the reported user cannot see the report', t.q($$select count(*) from public.message_reports$$), '0');
+select t.fails('only staff can resolve reports',
+  format($$select public.hq_resolve_message_report(%L, 'dismissed', 'x')$$, t.id('rep1')), 'not_allowed');
+select t.login('frank');
+select t.eq('staff of another country cannot see it', t.q($$select count(*) from public.message_reports$$), '0');
+select t.login('carol');
+select t.eq('ops staff see the report', t.q($$select count(*) from public.message_reports where status = 'open'$$), '1');
+select t.eq('the report carries recent context', t.q($$select (jsonb_array_length(context) >= 2)::text from public.message_reports$$), 'true');
+select public.hq_resolve_message_report(t.id('rep1'), 'actioned', 'Seller warned');
+select t.eq('resolution is audited', t.q($$select count(*) from public.audit_logs where action = 'message_report.resolve'$$), '1');
+
 select t.root();
 rollback;

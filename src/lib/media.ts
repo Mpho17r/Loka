@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { SUPABASE_URL } from './config';
-import type { PickedImage } from '../types';
-import { EXT, MAX_IMAGE_BYTES, base64ToBytes, checkImage } from './imageCheck';
+import type { PickedImage, PickedVideo } from '../types';
+import { EXT, MAX_IMAGE_BYTES, VIDEO_EXT, base64ToBytes, checkImage, checkVideo } from './imageCheck';
 
 export { MAX_IMAGE_BYTES, checkImage, base64ToBytes };
 
@@ -21,6 +21,36 @@ export async function pickImage(): Promise<PickedImage | null> {
   const problem = checkImage(img);
   if (problem) throw new Error(problem);
   return img;
+}
+
+/** Opens the video library (30 seconds at most). Returns null if cancelled. */
+export async function pickVideo(): Promise<PickedVideo | null> {
+  const ImagePicker = await import('expo-image-picker');
+  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!perm.granted) throw new Error('Loka needs access to your photos and videos to attach a video.');
+  const res = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['videos'], allowsMultipleSelection: false, videoMaxDuration: 30,
+  });
+  if (res.canceled || !res.assets?.[0]) return null;
+  const a = res.assets[0];
+  const v: PickedVideo = { uri: a.uri, mime: a.mimeType ?? 'video/mp4', bytes: a.fileSize ?? 0, durationMs: a.duration ?? 0 };
+  const problem = checkVideo(v);
+  if (problem) throw new Error(problem);
+  return v;
+}
+
+/** Uploads a video from its file address into <bucket>/<userId>/... Returns the object path. */
+export async function uploadVideo(userId: string, v: PickedVideo): Promise<string> {
+  if (!supabase) throw new Error('Uploads need the live back end.');
+  const problem = checkVideo(v);
+  if (problem) throw new Error(problem);
+  const rand = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join('');
+  const path = `${userId}/${Date.now()}-${rand}.${VIDEO_EXT[v.mime]}`;
+  const body = await (await fetch(v.uri)).arrayBuffer();
+  if (body.byteLength > 25 * 1024 * 1024) throw new Error('The video is larger than 25 MB. Choose a shorter one.');
+  const { error } = await supabase.storage.from('ad-media').upload(path, body, { contentType: v.mime, upsert: false });
+  if (error) throw new Error(error.message);
+  return path;
 }
 
 /** Uploads into <bucket>/<userId>/<random>.<ext> (storage policies only allow your own folder). Returns the object path. */

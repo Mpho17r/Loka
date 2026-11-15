@@ -6,7 +6,7 @@ import { friendlyError } from '../src/lib/errors';
 
 const input = {
   targetType: 'product' as const, targetId: 'p3', targetTitle: 'Basket set', headline: 'Handwoven baskets', placement: 'search' as const,
-  city: ALL_CITIES, impressions: 20000, days: 14, useCredit: true,
+  city: ALL_CITIES, impressions: 20000, days: 14, useCredit: true, format: 'image' as const,
 };
 
 async function setup() {
@@ -129,4 +129,48 @@ test('large refunds wait for a second approver; small ones happen at once', asyn
 
   await api.hqDecideRefund(waiting[0].id, true, '');
   assert.equal((await api.hqLoad(p)).refunds.length, 0);
+});
+
+test('video adverts: need a video, priced from the video rates, and a flagged file blocks approval', async () => {
+  const { api, p } = await setup();
+  const base = { ...input, placement: 'homepage' as const, format: 'video' as const, impressions: 1000, useCredit: false };
+  await assert.rejects(() => api.createCampaign(base, p, 0), /video_required/);
+  await assert.rejects(() => api.quote({ placement: 'search', city: ALL_CITIES, impressions: 1000, useCredit: false, format: 'video' }, p, 0), /no_price_for_placement/);
+  const q = await api.quote({ placement: 'homepage', city: ALL_CITIES, impressions: 1000, useCredit: false, format: 'video' }, p, 0);
+  assert.equal(q.cpm, 90);
+  const id = await api.createCampaign({ ...base, video: { uri: 'file:///v.mp4', mime: 'video/mp4', bytes: 1000, durationMs: 10000 } }, p, 0);
+  const hq = await api.hqLoad(p);
+  const c = hq.campaigns.find((x) => x.id === id)!;
+  assert.equal(c.format, 'video');
+  assert.equal(c.scan?.status, 'passed');
+  await api.hqBlockMedia(id, 'Misleading claim');
+  await assert.rejects(() => api.hqReview(id, 'approve', 'policy-ok', ''), /media_flagged/);
+  await assert.rejects(() => api.hqClearScan(id, ''), /reason_required/);
+  await api.hqClearScan(id, 'Looked at it: fine');
+  await api.hqReview(id, 'approve', 'policy-ok', '');
+});
+
+test('messaging: start, reply, block, report', async () => {
+  const { api, p } = await setup();
+  const mine = await api.createProduct({ title: 'My own item', description: 'x', price: 10, condition: 'New', category: 'Tools', city: 'Thohoyandou' }, p);
+  void mine;
+  const { products } = await api.loadCatalog();
+  const own = products.find((x) => x.ownerId === p.id);
+  if (own) await assert.rejects(() => api.startConversation('product', own.id), /cannot_message_yourself/);
+  const conv = await api.startConversation('product', 'p3', 'Is it still available?');
+  assert.equal(await api.startConversation('product', 'p3'), conv, 'same listing reuses the conversation');
+  let msgs = await api.loadMessages(conv);
+  assert.equal(msgs.length, 2, 'my message plus the demo reply');
+  assert.equal(msgs[0].mine, true);
+  await assert.rejects(() => api.sendMessage(conv, '   '), /invalid_message/);
+  await assert.rejects(() => api.reportMessage(msgs[0].id, 'x'), /cannot_report_own_message/);
+  await api.reportMessage(msgs[1].id, 'Rude');
+  assert.equal((await api.hqLoad(p)).messageReports.length, 1);
+  const [c] = await api.loadConversations();
+  await api.blockUser(c.otherUserId);
+  await assert.rejects(() => api.sendMessage(conv, 'hello'), /blocked/);
+  await api.unblockUser(c.otherUserId);
+  await api.sendMessage(conv, 'hello again');
+  msgs = await api.loadMessages(conv);
+  assert.equal(msgs[msgs.length - 1].body, 'hello again');
 });

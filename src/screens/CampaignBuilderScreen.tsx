@@ -1,4 +1,4 @@
-import { ImagePickerField } from '../components/media';
+import { ImagePickerField, VideoPickerField } from '../components/media';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -11,7 +11,7 @@ import {
 } from '../lib/pricing';
 import { friendlyError } from '../lib/errors';
 import { useApp } from '../store/AppState';
-import type { PickedImage, Placement, Quote } from '../types';
+import type { AdFormat, PickedImage, PickedVideo, Placement, Quote } from '../types';
 import type { RootStackParamList } from '../navigation/types';
 
 const MAX_IMPRESSIONS = 200000;
@@ -33,6 +33,8 @@ export default function CampaignBuilderScreen() {
 
   const initialKey = params?.targetType && params?.targetId ? `${params.targetType}:${params.targetId}` : listings[0]?.key ?? '';
   const [media, setMedia] = useState<PickedImage | undefined>(undefined);
+  const [video, setVideo] = useState<PickedVideo | undefined>(undefined);
+  const [format, setFormat] = useState<AdFormat>('image');
   const [targetKey, setTargetKey] = useState(initialKey);
   const target = listings.find((l) => l.key === targetKey) ?? listings[0];
 
@@ -55,11 +57,11 @@ export default function CampaignBuilderScreen() {
     if (!profile) return;
     let cancelled = false;
     setQuoteError(null);
-    api.quote({ placement, city, impressions, useCredit }, profile, balance)
+    api.quote({ placement, city, impressions, useCredit, format }, profile, balance)
       .then((q) => { if (!cancelled) setQuote(q); })
       .catch((e) => { if (!cancelled) { setQuote(null); setQuoteError(friendlyError(e)); } });
     return () => { cancelled = true; };
-  }, [api, profile, placement, city, impressions, useCredit, balance]);
+  }, [api, profile, placement, city, impressions, useCredit, balance, format]);
 
   if (!profile) {
     return <Screen><Empty title="Sign in to advertise" body="Open the Account tab, sign in, then come back to start a campaign." /></Screen>;
@@ -84,14 +86,14 @@ export default function CampaignBuilderScreen() {
   const step = (dir: 1 | -1) =>
     setImpressions((v) => Math.min(MAX_IMPRESSIONS, Math.max(MIN_IMPRESSIONS, v + dir * IMPRESSION_STEP * (v >= 20000 ? 5 : 1))));
 
-  const valid = headline.trim().length >= 5 && headline.length <= HEADLINE_MAX && accepted && !!quote && !busy;
+  const valid = headline.trim().length >= 5 && headline.length <= HEADLINE_MAX && accepted && !!quote && !busy && (format === 'image' || !!video);
 
   const submit = async () => {
     setBusy(true); setError(null);
     try {
       const id = await api.createCampaign({
         targetType: target.type, targetId: target.id, targetTitle: target.title, headline: headline.trim(),
-        placement, city, impressions, days, useCredit, media,
+        placement, city, impressions, days, useCredit, format, media: format === 'image' ? media : undefined, video: format === 'video' ? video : undefined,
       }, profile, balance);
       await refresh();
       nav.replace('CampaignDetail', { id });
@@ -107,12 +109,24 @@ export default function CampaignBuilderScreen() {
       <ChipRow options={listings.map((l) => l.title)} value={target.title} onChange={changeTarget} />
       <Muted style={{ marginBottom: 16 }}>Your advert uses this listing's title and details.</Muted>
 
-      <ImagePickerField
-        label="Advert image (optional)"
-        value={media}
-        onChange={setMedia}
-        hint="JPG, PNG or WebP, up to 5 MB. Use your own photo of the real item or service. Saccharum checks every image before it is shown."
-      />
+      <H2>Image or video?</H2>
+      <ChipRow options={['Image', 'Video']} value={format === 'video' ? 'Video' : 'Image'}
+        onChange={(v) => { setFormat(v === 'Video' ? 'video' : 'image'); if (v === 'Video' && placement !== 'homepage' && placement !== 'category') setPlacement('homepage'); }} />
+      {format === 'image' ? (
+        <ImagePickerField
+          label="Advert image (optional)"
+          value={media}
+          onChange={setMedia}
+          hint="JPG, PNG or WebP, up to 5 MB. Use your own photo of the real item or service. Files are scanned automatically and checked by Saccharum before they are shown."
+        />
+      ) : (
+        <VideoPickerField
+          label="Advert video"
+          value={video}
+          onChange={setVideo}
+          hint="MP4 or MOV, up to 30 seconds and 25 MB. Videos play silently on a loop. Video is sold on Home and Category only. Files are scanned automatically and checked by Saccharum before they are shown."
+        />
+      )}
 
       <Field
         label="Headline"
@@ -123,7 +137,7 @@ export default function CampaignBuilderScreen() {
       />
 
       <H2>2. Where should it appear?</H2>
-      {PLACEMENTS.map((p) => (
+      {PLACEMENTS.filter((p) => format === 'image' || p.id === 'homepage' || p.id === 'category').map((p) => (
         <Pressable key={p.id} onPress={() => setPlacement(p.id)} accessibilityRole="radio" accessibilityState={{ selected: placement === p.id }}>
           <Card style={{ borderColor: placement === p.id ? colors.primary : colors.line, borderWidth: placement === p.id ? 2 : 1 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>

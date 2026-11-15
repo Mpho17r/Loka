@@ -2,7 +2,9 @@ import type { Api, HqDecision, ListingFilter, Page, QuoteRequest } from './api';
 import { ALL_CITIES, calculateQuote } from '../lib/pricing';
 import { PRODUCTS, SERVICES } from './sample';
 import { emojiFor } from '../lib/mappers';
-import type { Ad, AppNotification, Campaign, CampaignStatus, HqManaged, HqReport, Product, Profile, Service, ServiceRequest } from '../types';
+import type {
+  Ad, AppNotification, Campaign, CampaignStatus, Conversation, HqManaged, HqMessageReport, HqReport, Message, Product, Profile, Service, ServiceRequest,
+} from '../types';
 
 /**
  * In-memory implementation used when no Supabase project is configured. It mirrors the rules enforced by the real
@@ -19,6 +21,9 @@ export function createDemoApi(): Api {
   let managed: HqManaged[] = [];
   let notifications: AppNotification[] = [];
   let refundRequests: { id: string; invoiceId: string; invoiceNumber: string; amount: number; reason: string }[] = [];
+  let conversations: Conversation[] = [];
+  const thread = new Map<string, Message[]>();
+  let messageReports: HqMessageReport[] = [];
   let lastReason = '';
   const REFUND_LIMIT = 500; // above this a second finance user must approve (demo lets the same person approve)
   let balance = 100;
@@ -119,6 +124,71 @@ export function createDemoApi(): Api {
     },
     async loadNotifications() { return notifications; },
     async markNotificationsRead() { notifications = notifications.map((n) => ({ ...n, read: true })); },
+    async hqClearScan(id, reason) {
+      needReason(reason);
+      const c = find(id);
+      if (!c.scan) throw new Error('scan_not_found');
+      set(id, { scan: { status: 'passed', reasons: c.scan.reasons, clearedReason: reason } });
+    },
+    async hqBlockMedia(id, reason) {
+      needReason(reason);
+      const c = find(id);
+      if (!c.scan) throw new Error('scan_not_found');
+      set(id, { scan: { status: 'flagged', reasons: [...c.scan.reasons, 'blocked_file'] } });
+    },
+    async hqResolveMessageReport(id) { messageReports = messageReports.filter((r) => r.id !== id); },
+
+    async startConversation(type, listingId, first) {
+      const listing = type === 'product' ? products.find((x) => x.id === listingId) : services.find((x) => x.id === listingId);
+      if (!listing) throw new Error('listing_not_found');
+      if (listing.ownerId === profile.id) throw new Error('cannot_message_yourself');
+      let conv = conversations.find((c) => c.listingType === type && c.listingId === listingId);
+      if (!conv) {
+        conv = {
+          id: 'conv' + ++counter, listingType: type, listingId, listingTitle: listing.title,
+          otherName: 'seller' in listing ? listing.seller : listing.provider, otherUserId: 'seller-' + listingId,
+          lastPreview: '', lastAt: new Date().toISOString(), unread: false, blockedByMe: false,
+        };
+        conversations = [conv, ...conversations];
+        thread.set(conv.id, []);
+      }
+      if (first && first.trim()) await this.sendMessage(conv.id, first);
+      return conv.id;
+    },
+    async loadConversations() { return conversations; },
+    async loadMessages(id) { return thread.get(id) ?? []; },
+    async sendMessage(id, body) {
+      const conv = conversations.find((c) => c.id === id);
+      const text = body.trim();
+      if (!conv) throw new Error('conversation_not_found');
+      if (text.length < 1 || text.length > 2000) throw new Error('invalid_message');
+      if (conv.blockedByMe) throw new Error('blocked');
+      const msgs = thread.get(id) ?? [];
+      const add = (mine: boolean, b: string) => msgs.push({ id: 'm' + ++counter, mine, body: b, createdAt: new Date().toISOString() });
+      add(true, text);
+      // demo only: the "seller" answers the first message so the screens can be tried
+      if (msgs.length === 1) add(false, 'Thanks for your message. This is an automatic demo reply; real sellers answer in their own time.');
+      thread.set(id, msgs);
+      conversations = conversations.map((c) => (c.id === id ? { ...c, lastPreview: msgs[msgs.length - 1].body.slice(0, 80), lastAt: new Date().toISOString() } : c));
+    },
+    async markConversationRead(id) { conversations = conversations.map((c) => (c.id === id ? { ...c, unread: false } : c)); },
+    async blockUser(userId) { conversations = conversations.map((c) => (c.otherUserId === userId ? { ...c, blockedByMe: true } : c)); },
+    async unblockUser(userId) { conversations = conversations.map((c) => (c.otherUserId === userId ? { ...c, blockedByMe: false } : c)); },
+    async reportMessage(messageId, reason) {
+      for (const [cid, msgs] of thread) {
+        const i = msgs.findIndex((m) => m.id === messageId);
+        if (i < 0) continue;
+        if (msgs[i].mine) throw new Error('cannot_report_own_message');
+        const conv = conversations.find((c) => c.id === cid);
+        messageReports = [{
+          id: 'mr' + ++counter, reason, reporterName: profile.fullName, reportedName: conv?.otherName ?? 'User',
+          context: msgs.slice(Math.max(0, i - 5), i + 1).map((m) => ({ fromReported: !m.mine, body: m.body, at: m.createdAt })),
+        }, ...messageReports];
+        return;
+      }
+      throw new Error('message_not_found');
+    },
+
     async registerPushToken() { /* demo: nothing to register */ },
     async setDeliveryPrefs(prefs) {
       profile = { ...profile, pushEnabled: prefs.push ?? profile.pushEnabled, emailEnabled: prefs.email ?? profile.emailEnabled };
@@ -126,16 +196,20 @@ export function createDemoApi(): Api {
     async cancelRequest(id) { requests = requests.map((r) => (r.id === id ? { ...r, status: 'Cancelled' } : r)); },
 
     async quote(req: QuoteRequest, p, bal) {
-      return calculateQuote({ placement: req.placement, city: req.city, impressions: req.impressions, isPremium: p.isPremium, creditBalance: req.useCredit ? bal : 0 });
+      return calculateQuote({ placement: req.placement, city: req.city, impressions: req.impressions, isPremium: p.isPremium, creditBalance: req.useCredit ? bal : 0, format: req.format });
     },
     async createCampaign(input, p, bal) {
       if (p.verification === 'unverified') throw new Error('account_not_verified');
-      const quote = calculateQuote({ placement: input.placement, city: input.city, impressions: input.impressions, isPremium: p.isPremium, creditBalance: input.useCredit ? bal : 0 });
+      if (input.format === 'video' && !input.video) throw new Error('video_required');
+      const quote = calculateQuote({ placement: input.placement, city: input.city, impressions: input.impressions, isPremium: p.isPremium, creditBalance: input.useCredit ? bal : 0, format: input.format });
+      const mediaPath = input.format === 'video' ? input.video?.uri : input.media?.uri;
       const id = 'c' + ++counter;
       const free = quote.total === 0;
       const end = new Date(); end.setUTCDate(end.getUTCDate() + input.days - 1);
       campaigns = [{
-        id, accountId: 'demo-acct', advertiser: p.fullName, targetType: input.targetType, targetId: input.targetId, targetTitle: input.targetTitle, mediaPath: input.media?.uri,
+        id, accountId: 'demo-acct', advertiser: p.fullName, targetType: input.targetType, targetId: input.targetId, targetTitle: input.targetTitle, mediaPath, format: input.format,
+        // demo only: a real scan runs in the scan-media function
+        scan: mediaPath ? { status: 'passed', reasons: [] } : undefined,
         headline: input.headline, placement: input.placement, city: input.city, impressions: input.impressions, delivered: 0, clicks: 0, days: input.days,
         startDate: today(), endDate: end.toISOString().slice(0, 10), status: 'Pending review', pausedByHq: false, quote,
         invoice: { id: 'i' + counter, number: 'LK-DEMO-' + String(counter).padStart(6, '0'), status: free ? 'verified' : 'issued', total: quote.total },
@@ -171,7 +245,7 @@ export function createDemoApi(): Api {
         .filter((c) => c.status === 'Live' && c.placement === placement && c.delivered < c.impressions && (c.city === ALL_CITIES || c.city === city)
           && (shown.get(c.id) ?? 0) < 3)
         .slice(0, 1)
-        .map((c) => ({ campaignId: c.id, headline: c.headline, description: '', mediaPath: c.mediaPath, targetType: c.targetType, targetId: c.targetId, placement: c.placement }));
+        .map((c) => ({ campaignId: c.id, headline: c.headline, description: '', mediaPath: c.mediaPath, format: c.format, targetType: c.targetType, targetId: c.targetId, placement: c.placement }));
     },
     async recordImpression(campaignId) {
       const c = campaigns.find((x) => x.id === campaignId);
@@ -197,7 +271,7 @@ export function createDemoApi(): Api {
         byPlacement.set(c.placement, r);
       });
       return {
-        campaigns, reports, managed,
+        campaigns, reports, managed, messageReports,
         refunds: refundRequests.map((r) => ({ id: r.id, invoiceNumber: r.invoiceNumber, amount: r.amount, reason: r.reason, requestedByMe: false })),
         revenue: [...byPlacement.entries()].map(([placement, r]) => ({ placement, ...r })),
         accounts: [{ id: profile.id, name: profile.fullName, verification: profile.verification, isPremium: profile.isPremium }],
@@ -208,6 +282,7 @@ export function createDemoApi(): Api {
       const c = find(id);
       if (c.status !== 'Pending review') throw new Error('not_pending_review');
       if (decision === 'approve') {
+        if (c.scan?.status === 'flagged') throw new Error('media_flagged');
         set(id, { status: c.invoice.status === 'verified' ? 'Scheduled' : 'Approved, awaiting payment' });
         goLiveIfDue(id);
         return;

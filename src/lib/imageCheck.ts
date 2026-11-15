@@ -1,4 +1,4 @@
-import type { PickedImage } from '../types';
+import type { PickedImage, PickedVideo } from '../types';
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
@@ -29,3 +29,15 @@ export function checkImage(img: PickedImage): string | null {
   return null;
 }
 
+
+export const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
+export const MAX_VIDEO_MS = 30_000;
+export const VIDEO_EXT: Record<string, string> = { 'video/mp4': 'mp4', 'video/quicktime': 'mov' };
+
+export function checkVideo(v: PickedVideo): string | null {
+  if (!VIDEO_EXT[v.mime]) return 'Use an MP4 or MOV video.';
+  if (v.bytes > MAX_VIDEO_BYTES) return 'The video is larger than 25 MB. Choose a shorter one.';
+  if (v.durationMs > MAX_VIDEO_MS) return 'The video is longer than 30 seconds.';
+  if (v.durationMs <= 0) return 'The video looks empty.';
+  return null;
+}

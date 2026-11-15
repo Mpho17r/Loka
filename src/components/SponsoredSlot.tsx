@@ -1,4 +1,4 @@
-import { AdImage } from './media';
+import { AdMedia } from './media';
 import React, { useEffect, useRef, useState } from 'react';
 import { Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -51,7 +51,7 @@ export function SponsoredSlot({ placement, city, targetType }: { placement: Plac
   return (
     <Card style={{ backgroundColor: colors.sponsoredBg, borderColor: colors.accent }} onPress={open}>
       <SponsoredTag />
-      <AdImage path={ad.mediaPath} />
+      <AdMedia path={ad.mediaPath} format={ad.format} height={150} feed />
       <Text style={{ fontSize: 17, fontWeight: '800', color: colors.ink, marginTop: 6 }}>{ad.headline}</Text>
       {subtitle ? <Muted>{subtitle}</Muted> : null}
     </Card>

@@ -9,6 +9,8 @@ import { AppStateProvider, useApp } from './src/store/AppState';
 import { colors } from './src/theme';
 import { configureForegroundNotifications } from './src/lib/push';
 import type { RootStackParamList, TabParamList } from './src/navigation/types';
+import InboxScreen from './src/screens/InboxScreen';
+import ChatScreen from './src/screens/ChatScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import MarketScreen from './src/screens/MarketScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
@@ -61,6 +63,8 @@ function Root() {
         <Stack.Screen name="RequestQuote" component={RequestQuoteScreen} options={{ title: 'Request a quotation' }} />
         <Stack.Screen name="CampaignBuilder" component={CampaignBuilderScreen} options={{ title: 'New campaign' }} />
         <Stack.Screen name="CampaignDetail" component={CampaignDetailScreen} options={{ title: 'Campaign' }} />
+        <Stack.Screen name="Inbox" component={InboxScreen} options={{ title: 'Messages' }} />
+        <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: route.params.title ?? 'Message' })} />
         <Stack.Screen name="CreateListing" component={CreateListingScreen} options={({ route }) => ({ title: route.params.type === 'product' ? 'Add product' : 'Add service' })} />
       </Stack.Navigator>
     </NavigationContainer>

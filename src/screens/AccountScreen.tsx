@@ -84,6 +84,8 @@ export default function AccountScreen() {
         </Card>
       ) : null}
 
+      <Button label="My messages" variant="secondary" onPress={() => nav.navigate('Inbox')} style={{ marginBottom: 12 }} />
+
       <H2>Alerts</H2>
       <Card>
         <Muted style={{ marginBottom: 8 }}>Get told when an advert is approved, goes live, needs changes or finishes.</Muted>
@@ -100,7 +102,7 @@ export default function AccountScreen() {
             {unread > 0 ? <Chip label="Mark all read" onPress={() => run(() => api.markNotificationsRead())} /> : null}
           </View>
           {notifications.slice(0, 8).map((n) => (
-            <Card key={n.id} onPress={n.campaignId ? () => nav.navigate('CampaignDetail', { id: n.campaignId as string }) : undefined}
+            <Card key={n.id} onPress={n.conversationId ? () => nav.navigate('Chat', { conversationId: n.conversationId as string }) : n.campaignId ? () => nav.navigate('CampaignDetail', { id: n.campaignId as string }) : undefined}
                   style={n.read ? undefined : { borderColor: colors.primary, borderWidth: 2 }}>
               <Text style={{ fontWeight: '700', color: colors.ink }}>{n.read ? '' : '● '}{n.title}</Text>
               <Muted>{n.body}</Muted>

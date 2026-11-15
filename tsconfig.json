@@ -9,6 +9,7 @@
   },
   "exclude": [
     "node_modules",
-    "supabase/functions/send-notifications/index.ts"
+    "supabase/functions/send-notifications/index.ts",
+    "supabase/functions/scan-media/index.ts"
   ]
 }

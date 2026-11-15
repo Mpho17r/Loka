@@ -5,6 +5,8 @@ export type RootStackParamList = {
   RequestQuote: { serviceId: string };
   CampaignBuilder: { targetType?: 'product' | 'service'; targetId?: string };
   CampaignDetail: { id: string };
+  Inbox: undefined;
+  Chat: { conversationId?: string; listingType?: 'product' | 'service'; listingId?: string; title?: string };
   CreateListing: { type: 'product' | 'service' };
 };
 

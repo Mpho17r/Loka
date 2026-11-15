@@ -35,6 +35,13 @@
         {
           "color": "#1F6F5C"
         }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": false,
+          "supportsPictureInPicture": false
+        }
       ]
     ]
   }
