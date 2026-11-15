@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from 'react-native';
 import { colors, radius, spacing } from '../theme';
 import type { Verification } from '../types';
 
@@ -179,3 +179,20 @@ const s = StyleSheet.create({
   track: { height: 8, borderRadius: 4, backgroundColor: '#E8E5DC', overflow: 'hidden', marginVertical: 6 },
   fill: { height: 8, backgroundColor: colors.primary },
 });
+
+/** Bottom of a paged list: spinner while loading, an error with retry, and a Load more button. */
+export function ListFooter({ loading, loadingMore, hasMore, error, onMore, onRetry }: {
+  loading: boolean; loadingMore: boolean; hasMore: boolean; error: string | null; onMore: () => void; onRetry: () => void;
+}) {
+  if (error) {
+    return (
+      <View style={{ alignItems: 'center', padding: spacing.lg }}>
+        <Muted style={{ color: colors.danger, textAlign: 'center', marginBottom: 8 }}>{error}</Muted>
+        <Button label="Try again" variant="secondary" onPress={onRetry} />
+      </View>
+    );
+  }
+  if (loading || loadingMore) return <ActivityIndicator color={colors.primary} style={{ margin: spacing.lg }} accessibilityLabel="Loading" />;
+  if (hasMore) return <Button label="Load more" variant="secondary" onPress={onMore} />;
+  return null;
+}

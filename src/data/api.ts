@@ -11,9 +11,24 @@ export interface QuoteRequest {
 }
 
 export interface MineData {
+  products: Product[];
+  services: Service[];
   campaigns: Campaign[];
   requests: ServiceRequest[];
   balance: number;
+}
+
+export interface ListingFilter {
+  q: string;
+  category: string; // 'All' for every category
+  city: string;     // ALL_CITIES for everywhere
+  offset: number;
+  limit: number;
+}
+
+export interface Page<T> {
+  items: T[];
+  hasMore: boolean;
 }
 
 export type HqDecision = 'approve' | 'reject' | 'changes';
@@ -31,6 +46,11 @@ export interface Api {
 
   // catalogue
   loadCatalog(): Promise<{ products: Product[]; services: Service[] }>;
+  /** Server-side search with paging, so the app never has to download every listing. */
+  searchProducts(filter: ListingFilter): Promise<Page<Product>>;
+  searchServices(filter: ListingFilter): Promise<Page<Service>>;
+  getProduct(id: string): Promise<Product | null>;
+  getService(id: string): Promise<Service | null>;
   createProduct(input: NewProduct, profile: Profile): Promise<void>;
   createService(input: NewService, profile: Profile): Promise<void>;
 

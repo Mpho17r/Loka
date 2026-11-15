@@ -1,8 +1,8 @@
-import type { Api, HqDecision, MineData, QuoteRequest } from './api';
+import type { Api, HqDecision, ListingFilter, MineData, Page, QuoteRequest } from './api';
 import { getViewerKey, supabase } from '../lib/supabase';
 import { ALL_CITIES } from '../lib/pricing';
 import { mapCampaign, mapProduct, mapProfile, mapQuote, mapRequest, mapService } from '../lib/mappers';
-import type { Ad, AppNotification, Campaign, HqData, HqReport, Placement, Quote } from '../types';
+import type { Ad, AppNotification, Campaign, HqData, HqReport, Placement, Product, Quote } from '../types';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
@@ -35,6 +35,9 @@ async function titleLookup(rows: Row[]): Promise<(type: 'product' | 'service', i
   if (sIds.length) ok<Row[]>(await sb.from('services').select('id, title').in('id', sIds)).forEach((r) => titles.set(r.id, r.title));
   return (_type, id) => titles.get(id) ?? 'Listing';
 }
+
+/** Strip characters that have a meaning inside a PostgREST filter string or an ILIKE pattern. */
+const clean = (s: string) => s.replace(/[%,()*\\_:"']/g, ' ').replace(/\s+/g, ' ').trim();
 
 export const supabaseApi: Api = {
   mode: 'supabase',
@@ -74,11 +77,43 @@ export const supabaseApi: Api = {
 
   async loadCatalog() {
     const sb = client();
+    // Only the newest listings: screens page and search on the server, and fetch single listings by id when needed.
     const [products, services] = await Promise.all([
-      sb.from('products').select('*').eq('status', 'active').order('created_at', { ascending: false }).limit(500),
-      sb.from('services').select('*').eq('status', 'active').order('created_at', { ascending: false }).limit(500),
+      sb.from('products').select('*').eq('status', 'active').order('created_at', { ascending: false }).limit(30),
+      sb.from('services').select('*').eq('status', 'active').order('created_at', { ascending: false }).limit(30),
     ]);
     return { products: ok<Row[]>(products).map(mapProduct), services: ok<Row[]>(services).map(mapService) };
+  },
+
+  async searchProducts(f: ListingFilter): Promise<Page<Product>> {
+    let query = client().from('products').select('*').eq('status', 'active');
+    const q = clean(f.q);
+    if (q) query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%,seller_name.ilike.%${q}%`);
+    if (f.category !== 'All') query = query.eq('category', f.category);
+    if (f.city !== ALL_CITIES) query = query.eq('city', f.city);
+    const rows = ok<Row[]>(await query.order('created_at', { ascending: false }).order('id', { ascending: false }).range(f.offset, f.offset + f.limit));
+    return { items: rows.slice(0, f.limit).map(mapProduct), hasMore: rows.length > f.limit };
+  },
+
+  async searchServices(f: ListingFilter) {
+    let query = client().from('services').select('*').eq('status', 'active');
+    const q = clean(f.q);
+    if (q) query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%,provider_name.ilike.%${q}%`);
+    if (f.category !== 'All') query = query.eq('category', f.category);
+    // remote and "both" services can serve anyone, so they match every city
+    if (f.city !== ALL_CITIES) query = query.or(`city.eq.${clean(f.city)},delivery.neq.On-site`);
+    const rows = ok<Row[]>(await query.order('created_at', { ascending: false }).order('id', { ascending: false }).range(f.offset, f.offset + f.limit));
+    return { items: rows.slice(0, f.limit).map(mapService), hasMore: rows.length > f.limit };
+  },
+
+  async getProduct(id) {
+    const r = ok<Row | null>(await client().from('products').select('*').eq('id', id).maybeSingle());
+    return r ? mapProduct(r) : null;
+  },
+
+  async getService(id) {
+    const r = ok<Row | null>(await client().from('services').select('*').eq('id', id).maybeSingle());
+    return r ? mapService(r) : null;
   },
 
   async createProduct(input, profile) {
@@ -109,8 +144,12 @@ export const supabaseApi: Api = {
       campaigns = rows.map((r) => mapCampaign(r, titleFor, profile.fullName));
       balance = Number(ok<number | null>(await sb.rpc('ad_balance', { p_account: acct.id })) ?? 0);
     }
+    const [myP, myS] = await Promise.all([
+      sb.from('products').select('*').eq('owner_id', profile.id).neq('status', 'removed').order('created_at', { ascending: false }),
+      sb.from('services').select('*').eq('owner_id', profile.id).neq('status', 'removed').order('created_at', { ascending: false }),
+    ]);
     const reqs = ok<Row[]>(await sb.from('service_requests').select('*, services(title)').eq('requester_id', profile.id).order('created_at', { ascending: false }));
-    return { campaigns, requests: reqs.map(mapRequest), balance };
+    return { products: ok<Row[]>(myP).map(mapProduct), services: ok<Row[]>(myS).map(mapService), campaigns, requests: reqs.map(mapRequest), balance };
   },
 
   async submitRequest(input, profile) {

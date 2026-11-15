@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Card, ChipRow, Empty, H2, Muted, Screen, StatusPill, VerifiedBadge } from '../components/ui';
+import { Card, ChipRow, Empty, H2, ListFooter, Muted, Screen, StatusPill, VerifiedBadge } from '../components/ui';
+import { usePagedSearch } from '../lib/usePagedSearch';
 import { colors } from '../theme';
 import { CITIES, SERVICE_CATEGORIES, VIEWER_CITY } from '../data/sample';
 import { SponsoredSlot } from '../components/SponsoredSlot';
@@ -10,6 +11,8 @@ import { ALL_CITIES, formatZAR } from '../lib/pricing';
 import { useApp } from '../store/AppState';
 import type { Service } from '../types';
 import type { RootStackParamList } from '../navigation/types';
+
+const PAGE_SIZE = 20;
 
 export function priceLabel(s: Service): string {
   if (s.pricingModel === 'Quotation') return 'Quotation';
@@ -20,21 +23,17 @@ export function priceLabel(s: Service): string {
 
 export default function ServicesScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { services, requests } = useApp();
+  const { api, cacheListings, requests } = useApp();
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('All');
   const [city, setCity] = useState(ALL_CITIES);
 
-  const results = useMemo(
-    () =>
-      services.filter(
-        (s) =>
-          (category === 'All' || s.category === category) &&
-          (city === ALL_CITIES || s.city === city || s.delivery !== 'On-site') &&
-          (q.trim() === '' || (s.title + s.provider + s.description).toLowerCase().includes(q.trim().toLowerCase())),
-      ),
-    [services, q, category, city],
+  const { items: results, loading, loadingMore, hasMore, error, loadMore, retry } = usePagedSearch<Service>(
+    (offset) => api.searchServices({ q, category, city, offset, limit: PAGE_SIZE }),
+    `${q.trim()}|${category}|${city}`,
   );
+  useEffect(() => { cacheListings(undefined, results); }, [results, cacheListings]);
+
 
   const viewerCity = city === ALL_CITIES ? VIEWER_CITY : city;
 
@@ -73,7 +72,7 @@ export default function ServicesScreen() {
 
       <SponsoredSlot placement={category === 'All' ? 'search' : 'category'} city={viewerCity} targetType="service" />
 
-      {results.length === 0 ? (
+      {!loading && !error && results.length === 0 ? (
         <Empty title="No providers found" body="Try another category or city." />
       ) : (
         results.map((s) => (
@@ -92,6 +91,7 @@ export default function ServicesScreen() {
           </Card>
         ))
       )}
+      <ListFooter loading={loading} loadingMore={loadingMore} hasMore={hasMore} error={error} onMore={loadMore} onRetry={retry} />
     </Screen>
   );
 }

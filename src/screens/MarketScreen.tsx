@@ -1,32 +1,32 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Card, ChipRow, Empty, Muted, Screen, VerifiedBadge } from '../components/ui';
+import { Card, ChipRow, Empty, ListFooter, Muted, Screen, VerifiedBadge } from '../components/ui';
 import { colors } from '../theme';
 import { CITIES, PRODUCT_CATEGORIES, VIEWER_CITY } from '../data/sample';
 import { SponsoredSlot } from '../components/SponsoredSlot';
 import { ALL_CITIES, formatZAR } from '../lib/pricing';
 import { useApp } from '../store/AppState';
+import { usePagedSearch } from '../lib/usePagedSearch';
+import type { Product } from '../types';
 import type { RootStackParamList } from '../navigation/types';
+
+const PAGE_SIZE = 20;
 
 export default function MarketScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { products } = useApp();
+  const { api, cacheListings } = useApp();
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('All');
   const [city, setCity] = useState(ALL_CITIES);
 
-  const results = useMemo(
-    () =>
-      products.filter(
-        (p) =>
-          (category === 'All' || p.category === category) &&
-          (city === ALL_CITIES || p.city === city) &&
-          (q.trim() === '' || (p.title + p.seller + p.description).toLowerCase().includes(q.trim().toLowerCase())),
-      ),
-    [products, q, category, city],
+  const { items: results, loading, loadingMore, hasMore, error, loadMore, retry } = usePagedSearch<Product>(
+    (offset) => api.searchProducts({ q, category, city, offset, limit: PAGE_SIZE }),
+    `${q.trim()}|${category}|${city}`,
   );
+  // remember what we have seen so detail screens and adverts open instantly
+  useEffect(() => { cacheListings(results); }, [results, cacheListings]);
 
   // Sponsored cards sit in their own marked slot and never change the organic order.
   const viewerCity = city === ALL_CITIES ? VIEWER_CITY : city;
@@ -49,7 +49,7 @@ export default function MarketScreen() {
 
       <SponsoredSlot placement={category === 'All' ? 'search' : 'category'} city={viewerCity} targetType="product" />
 
-      {results.length === 0 ? (
+      {!loading && !error && results.length === 0 ? (
         <Empty title="Nothing found" body="Try a different search, category or city." />
       ) : (
         results.map((p) => (
@@ -68,6 +68,7 @@ export default function MarketScreen() {
           </Card>
         ))
       )}
+      <ListFooter loading={loading} loadingMore={loadingMore} hasMore={hasMore} error={error} onMore={loadMore} onRetry={retry} />
     </Screen>
   );
 }

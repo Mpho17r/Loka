@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, ChipRow, Empty, H2, Field, Muted, Screen } from '../components/ui';
+import { useService } from '../lib/useListing';
 import { CITIES } from '../data/sample';
 import { useApp } from '../store/AppState';
 import type { RootStackParamList } from '../navigation/types';
@@ -10,8 +11,8 @@ import type { RootStackParamList } from '../navigation/types';
 export default function RequestQuoteScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { params } = useRoute<RouteProp<RootStackParamList, 'RequestQuote'>>();
-  const { api, services, profile, run } = useApp();
-  const service = services.find((s) => s.id === params.serviceId);
+  const { api, profile, run } = useApp();
+  const { item: service, loading: serviceLoading } = useService(params.serviceId);
   const [busy, setBusy] = useState(false);
 
   const [details, setDetails] = useState('');
@@ -19,6 +20,7 @@ export default function RequestQuoteScreen() {
   const [date, setDate] = useState('');
   const [budget, setBudget] = useState('');
 
+  if (!service && serviceLoading) return <Screen><Muted>Loading…</Muted></Screen>;
   if (!service) return <Screen><Empty title="Service not found" body="It may have been removed." /></Screen>;
 
   const dateOk = date === '' || /^\d{4}-\d{2}-\d{2}$/.test(date);

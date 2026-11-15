@@ -1,4 +1,4 @@
-import type { Api, HqDecision, QuoteRequest } from './api';
+import type { Api, HqDecision, ListingFilter, Page, QuoteRequest } from './api';
 import { ALL_CITIES, calculateQuote } from '../lib/pricing';
 import { PRODUCTS, SERVICES } from './sample';
 import { emojiFor } from '../lib/mappers';
@@ -84,7 +84,24 @@ export function createDemoApi(): Api {
     async signUp(_e, _p, name) { signedIn = true; profile = { ...profile, fullName: name || 'Demo User' }; changed(); return { needsConfirmation: false }; },
     async signOut() { signedIn = false; changed(); },
 
-    async loadCatalog() { return { products, services }; },
+    async loadCatalog() { return { products: products.slice(0, 30), services: services.slice(0, 30) }; },
+    async searchProducts(f: ListingFilter): Promise<Page<Product>> {
+      const q = f.q.trim().toLowerCase();
+      const hits = products.filter((p) =>
+        (f.category === 'All' || p.category === f.category) && (f.city === ALL_CITIES || p.city === f.city)
+        && (q === '' || `${p.title} ${p.description} ${p.seller}`.toLowerCase().includes(q)));
+      return { items: hits.slice(f.offset, f.offset + f.limit), hasMore: hits.length > f.offset + f.limit };
+    },
+    async searchServices(f: ListingFilter): Promise<Page<Service>> {
+      const q = f.q.trim().toLowerCase();
+      const hits = services.filter((s) =>
+        (f.category === 'All' || s.category === f.category)
+        && (f.city === ALL_CITIES || s.city === f.city || s.delivery !== 'On-site') // remote services serve every city
+        && (q === '' || `${s.title} ${s.description} ${s.provider}`.toLowerCase().includes(q)));
+      return { items: hits.slice(f.offset, f.offset + f.limit), hasMore: hits.length > f.offset + f.limit };
+    },
+    async getProduct(id) { return products.find((p) => p.id === id) ?? null; },
+    async getService(id) { return services.find((s) => s.id === id) ?? null; },
     async createProduct(input, p) {
       products = [{ id: 'p' + ++counter, ownerId: p.id, title: input.title, price: input.price, condition: input.condition, category: input.category,
         city: input.city, seller: p.fullName, verification: p.verification, description: input.description, emoji: emojiFor(input.category) }, ...products];
@@ -95,7 +112,7 @@ export function createDemoApi(): Api {
         jobs: 0, description: input.description, emoji: emojiFor(input.category) }, ...services];
     },
 
-    async loadMine() { return { campaigns: campaigns.filter((c) => c.accountId === 'demo-acct'), requests, balance }; },
+    async loadMine() { return { products, services, campaigns: campaigns.filter((c) => c.accountId === 'demo-acct'), requests, balance }; },
     async submitRequest(input) {
       requests = [{ id: 'r' + ++counter, serviceId: input.serviceId, serviceTitle: input.serviceTitle, details: input.details, city: input.city,
         budget: input.budget, preferredDate: input.preferredDate, status: 'Submitted', createdAt: today() }, ...requests];

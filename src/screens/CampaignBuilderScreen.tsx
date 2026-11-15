@@ -20,16 +20,15 @@ const DURATIONS = ['7 days', '14 days', '30 days'];
 export default function CampaignBuilderScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { params } = useRoute<RouteProp<RootStackParamList, 'CampaignBuilder'>>();
-  const { api, mode, profile, products, services, balance, refresh } = useApp();
+  const { api, mode, profile, myProducts, myServices, balance, refresh } = useApp();
 
   // Advertisers can promote only their own listings. Demo mode allows all sample listings.
   const listings = useMemo(() => {
-    const mine = (owner: string | null) => mode === 'demo' || (!!profile && owner === profile.id);
     return [
-      ...products.filter((p) => mine(p.ownerId)).map((p) => ({ key: `product:${p.id}`, type: 'product' as const, id: p.id, title: p.title })),
-      ...services.filter((s) => mine(s.ownerId)).map((s) => ({ key: `service:${s.id}`, type: 'service' as const, id: s.id, title: s.title })),
+      ...myProducts.map((p) => ({ key: `product:${p.id}`, type: 'product' as const, id: p.id, title: p.title })),
+      ...myServices.map((s) => ({ key: `service:${s.id}`, type: 'service' as const, id: s.id, title: s.title })),
     ];
-  }, [products, services, profile, mode]);
+  }, [myProducts, myServices]);
 
   const initialKey = params?.targetType && params?.targetId ? `${params.targetType}:${params.targetId}` : listings[0]?.key ?? '';
   const [targetKey, setTargetKey] = useState(initialKey);

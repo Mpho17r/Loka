@@ -14,7 +14,7 @@ import type { RootStackParamList } from '../navigation/types';
  * It never reorders the organic results around it.
  */
 export function SponsoredSlot({ placement, city, targetType }: { placement: Placement; city: string; targetType?: 'product' | 'service' }) {
-  const { api, products, services } = useApp();
+  const { api } = useApp();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [ad, setAd] = useState<Ad | null>(null);
   const counted = useRef<string | null>(null);
@@ -39,9 +39,7 @@ export function SponsoredSlot({ placement, city, targetType }: { placement: Plac
   }, [api, ad]);
 
   if (!ad) return null;
-  const subtitle = ad.targetType === 'product'
-    ? products.find((p) => p.id === ad.targetId)?.title
-    : services.find((s) => s.id === ad.targetId)?.title;
+  const subtitle = ad.description || undefined;
 
   const open = () => {
     api.recordClick(ad.campaignId).catch(() => undefined);

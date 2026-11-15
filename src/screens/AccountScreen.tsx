@@ -11,7 +11,7 @@ import type { RootStackParamList } from '../navigation/types';
 
 export default function AccountScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { api, mode, profile, products, services, requests, balance, notifications, unread, run, isStaff } = useApp();
+  const { api, mode, profile, myProducts, myServices, requests, balance, notifications, unread, run, isStaff } = useApp();
   const [signUp, setSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,8 +50,6 @@ export default function AccountScreen() {
     );
   }
 
-  const myProducts = products.filter((p) => mode === 'demo' ? p.ownerId === profile.id : p.ownerId === profile.id);
-  const myServices = services.filter((s) => s.ownerId === profile.id);
   const activeRequests = requests.filter((r) => r.status !== 'Cancelled');
 
   return (

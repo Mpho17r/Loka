@@ -12,8 +12,14 @@ export interface AppState {
   ready: boolean;
   profile: Profile | null;
   isStaff: boolean;
+  /** Cache of listings seen so far (newest page, search results, listings opened by id, and the user's own). */
   products: Product[];
   services: Service[];
+  /** The signed-in user's own listings (all of them, whatever their age). */
+  myProducts: Product[];
+  myServices: Service[];
+  /** Adds listings fetched by search or by id to the cache so detail screens and adverts can find them. */
+  cacheListings: (products?: Product[], services?: Service[]) => void;
   campaigns: Campaign[];
   requests: ServiceRequest[];
   balance: number;
@@ -28,12 +34,21 @@ export interface AppState {
 
 const Ctx = createContext<AppState | null>(null);
 
+function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
+  if (incoming.length === 0) return existing;
+  const byId = new Map(existing.map((x) => [x.id, x]));
+  incoming.forEach((x) => byId.set(x.id, x));
+  return [...byId.values()];
+}
+
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const api = useMemo<Api>(() => (BACKEND_ENABLED ? supabaseApi : createDemoApi()), []);
   const [ready, setReady] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [myProducts, setMyProducts] = useState<Product[]>([]);
+  const [myServices, setMyServices] = useState<Service[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [balance, setBalance] = useState(0);
@@ -43,21 +58,30 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const isStaff = !!profile && profile.roles.length > 0;
 
+  const cacheListings = useCallback((p: Product[] = [], s: Service[] = []) => {
+    if (p.length) setProducts((prev) => mergeById(prev, p));
+    if (s.length) setServices((prev) => mergeById(prev, s));
+  }, []);
+
   const loadAll = useCallback(async () => {
     try {
       const [p, catalog] = await Promise.all([api.getProfile(), api.loadCatalog()]);
       profileRef.current = p;
       setProfile(p);
-      setProducts(catalog.products);
-      setServices(catalog.services);
+      setProducts((prev) => mergeById(prev, catalog.products));
+      setServices((prev) => mergeById(prev, catalog.services));
       if (p) {
         const mine = await api.loadMine(p);
+        setMyProducts(mine.products);
+        setMyServices(mine.services);
+        setProducts((prev) => mergeById(prev, mine.products));
+        setServices((prev) => mergeById(prev, mine.services));
         setCampaigns(mine.campaigns);
         setRequests(mine.requests);
         setBalance(mine.balance);
         setNotifications(await api.loadNotifications().catch(() => []));
       } else {
-        setCampaigns([]); setRequests([]); setBalance(0); setNotifications([]); setHq(null);
+        setMyProducts([]); setMyServices([]); setCampaigns([]); setRequests([]); setBalance(0); setNotifications([]); setHq(null);
       }
     } catch {
       // Keep whatever is on screen; individual actions surface their own errors.
@@ -90,8 +114,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const value = useMemo<AppState>(() => ({
-    api, mode: api.mode, ready, profile, isStaff, products, services, campaigns, requests, balance, notifications, unread: notifications.filter((n) => !n.read).length, hq, refresh, refreshHq, run,
-  }), [api, ready, profile, isStaff, products, services, campaigns, requests, balance, notifications, hq, refresh, refreshHq, run]);
+    api, mode: api.mode, ready, profile, isStaff, products, services, myProducts, myServices, cacheListings, campaigns, requests, balance, notifications, unread: notifications.filter((n) => !n.read).length, hq, refresh, refreshHq, run,
+  }), [api, ready, profile, isStaff, products, services, myProducts, myServices, cacheListings, campaigns, requests, balance, notifications, hq, refresh, refreshHq, run]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -23,6 +23,9 @@ begin perform set_config('request.jwt.claim.sub', '', true); execute 'reset role
 
 create function t.q(p_sql text) returns text language plpgsql as $$
 declare r text; begin execute p_sql into r; return r; end $$;
+create function t.plan(p_sql text) returns text language plpgsql as $$
+declare r record; v text := '';
+begin for r in execute 'explain ' || p_sql loop v := v || (r."QUERY PLAN") || ' '; end loop; return v; end $$;
 create function t.eq(p_label text, p_actual text, p_expected text) returns void language plpgsql as $$
 begin
   if p_actual is distinct from p_expected then
@@ -365,6 +368,33 @@ select t.login('alice');
 select t.eq('advertisers cannot see refund requests', t.q($$select count(*) from public.refund_requests$$), '0');
 select t.fails('advertisers cannot request refunds',
   format($$select public.hq_refund(%L, 10, 'give me money')$$, (select id from public.invoices where campaign_id = t.id('c1'))), 'not_allowed');
+
+
+-- ------------------------------------------------------------------ push tokens and delivery preferences
+select t.login('alice');
+insert into public.push_tokens (user_id, token, platform) values (t.id('alice'), 'ExponentPushToken[alice-device-1]', 'android');
+select t.eq('user can register a push token', t.q($$select count(*) from public.push_tokens$$), '1');
+select t.fails('user cannot register a token for someone else',
+  format($$insert into public.push_tokens (user_id, token) values (%L, 'ExponentPushToken[evil-token-x]')$$, t.id('mallory')), 'row-level security');
+select t.fails('the same token cannot be registered twice for one user',
+  format($$insert into public.push_tokens (user_id, token) values (%L, 'ExponentPushToken[alice-device-1]')$$, t.id('alice')), 'duplicate key');
+select t.login('mallory');
+select t.eq('other users cannot see her tokens', t.q($$select count(*) from public.push_tokens$$), '0');
+select t.login('alice');
+update public.profiles set email_enabled = false, push_enabled = false where id = auth.uid();
+select t.eq('user can switch off email', t.q($$select email_enabled from public.profiles where id = auth.uid()$$), 'false');
+select t.fails('delivery marker cannot be set by users',
+  $$update public.notifications set delivered_at = now()$$, 'permission denied');
+
+-- ------------------------------------------------------------------ search indexes are used for partial-text search
+select t.root();
+set local enable_seqscan = off;
+select t.eq('partial text search on title uses the trigram index',
+  t.q($$select (t.plan($q$select 1 from public.products where title ilike '%mango%'$q$) like '%products_title_trgm%')::text$$), 'true');
+select t.eq('partial text search on services uses the trigram index',
+  t.q($$select (t.plan($q$select 1 from public.services where description ilike '%plumb%'$q$) like '%services_description_trgm%')::text$$), 'true');
+select t.eq('search finds the listing', t.q($$select count(*) from public.products where title ilike '%mango%' or description ilike '%mango%'$$), '1');
+set local enable_seqscan = on;
 
 select t.root();
 rollback;

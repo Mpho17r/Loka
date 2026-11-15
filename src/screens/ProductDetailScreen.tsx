@@ -3,6 +3,7 @@ import { Alert, Text } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Empty, H1, Muted, Screen, VerifiedBadge } from '../components/ui';
+import { useProduct } from '../lib/useListing';
 import { colors } from '../theme';
 import { useApp } from '../store/AppState';
 import { formatZAR } from '../lib/pricing';
@@ -11,10 +12,11 @@ import type { RootStackParamList } from '../navigation/types';
 export default function ProductDetailScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { params } = useRoute<RouteProp<RootStackParamList, 'ProductDetail'>>();
-  const { products, profile, mode } = useApp();
-  const p = products.find((x) => x.id === params.id);
+  const { profile, mode } = useApp();
+  const { item: p, loading } = useProduct(params.id);
   const canPromote = mode === 'demo' || (!!profile && p?.ownerId === profile.id);
 
+  if (!p && loading) return <Screen><Muted>Loading…</Muted></Screen>;
   if (!p) return <Screen><Empty title="Listing not found" body="It may have been removed." /></Screen>;
 
   return (
