@@ -1,3 +1,4 @@
+import { AdImage, ProofLink } from '../components/media';
 import React, { useEffect, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { Button, Card, ChipRow, Empty, Field, H2, Muted, Row, Screen, StatusPill } from '../components/ui';
@@ -45,6 +46,7 @@ export default function HQScreen() {
     <View>
       <Text style={{ fontWeight: '700', color: colors.ink }}>{c.headline}</Text>
       <Muted>{c.advertiser ?? 'Advertiser'} · {c.targetTitle}</Muted>
+      <AdImage path={c.mediaPath} height={140} />
       <Muted>{label(c.placement)} · {c.city} · {c.impressions.toLocaleString('en-ZA')} impressions · {c.startDate} to {c.endDate}</Muted>
       <View style={{ marginVertical: 6, flexDirection: 'row', gap: 8 }}>
         <StatusPill label={c.status} tone={statusTone(c.status)} />
@@ -93,6 +95,7 @@ export default function HQScreen() {
             <Card key={c.id}>
               {header(c)}
               <Row label="Invoice total" value={formatZAR(c.invoice.total)} bold />
+              <ProofLink path={c.invoice.proofPath} />
               <Button label="Mark payment verified" onPress={() => act(() => api.hqVerifyPayment(c.invoice.id, reason), false)} />
             </Card>
           ))}

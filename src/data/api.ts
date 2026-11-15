@@ -1,6 +1,6 @@
 import type {
   Ad, Campaign, CampaignInput, HqData, NewProduct, NewService, Placement, Product, Profile, Quote, Service,
-  ServiceRequest, Verification, AppNotification,
+  ServiceRequest, Verification, AppNotification, PickedImage,
 } from '../types';
 
 export interface QuoteRequest {
@@ -60,12 +60,15 @@ export interface Api {
   cancelRequest(id: string): Promise<void>;
   loadNotifications(): Promise<AppNotification[]>;
   markNotificationsRead(): Promise<void>;
+  /** Saves this phone's push address for the signed-in user. */
+  registerPushToken(token: string, platform: string): Promise<void>;
+  setDeliveryPrefs(prefs: { push?: boolean; email?: boolean }): Promise<void>;
 
   // Promote: advertiser
   quote(req: QuoteRequest, profile: Profile, balance: number): Promise<Quote>;
   createCampaign(input: CampaignInput, profile: Profile, balance: number): Promise<string>;
   campaignAction(id: string, action: 'pause' | 'resume' | 'cancel'): Promise<void>;
-  declarePayment(invoiceId: string, reference: string): Promise<void>;
+  declarePayment(invoiceId: string, reference: string, proof?: PickedImage): Promise<void>;
   reportAd(campaignId: string, reason: string, profile: Profile): Promise<void>;
   requestManaged(brief: string, budget: number | undefined, profile: Profile): Promise<void>;
 

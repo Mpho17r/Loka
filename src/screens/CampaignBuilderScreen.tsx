@@ -1,3 +1,4 @@
+import { ImagePickerField } from '../components/media';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -10,7 +11,7 @@ import {
 } from '../lib/pricing';
 import { friendlyError } from '../lib/errors';
 import { useApp } from '../store/AppState';
-import type { Placement, Quote } from '../types';
+import type { PickedImage, Placement, Quote } from '../types';
 import type { RootStackParamList } from '../navigation/types';
 
 const MAX_IMPRESSIONS = 200000;
@@ -31,6 +32,7 @@ export default function CampaignBuilderScreen() {
   }, [myProducts, myServices]);
 
   const initialKey = params?.targetType && params?.targetId ? `${params.targetType}:${params.targetId}` : listings[0]?.key ?? '';
+  const [media, setMedia] = useState<PickedImage | undefined>(undefined);
   const [targetKey, setTargetKey] = useState(initialKey);
   const target = listings.find((l) => l.key === targetKey) ?? listings[0];
 
@@ -89,7 +91,7 @@ export default function CampaignBuilderScreen() {
     try {
       const id = await api.createCampaign({
         targetType: target.type, targetId: target.id, targetTitle: target.title, headline: headline.trim(),
-        placement, city, impressions, days, useCredit,
+        placement, city, impressions, days, useCredit, media,
       }, profile, balance);
       await refresh();
       nav.replace('CampaignDetail', { id });
@@ -103,7 +105,14 @@ export default function CampaignBuilderScreen() {
     <Screen>
       <H2>1. What are you promoting?</H2>
       <ChipRow options={listings.map((l) => l.title)} value={target.title} onChange={changeTarget} />
-      <Muted style={{ marginBottom: 16 }}>Your advert uses this listing's details, so there is nothing to upload again.</Muted>
+      <Muted style={{ marginBottom: 16 }}>Your advert uses this listing's title and details.</Muted>
+
+      <ImagePickerField
+        label="Advert image (optional)"
+        value={media}
+        onChange={setMedia}
+        hint="JPG, PNG or WebP, up to 5 MB. Use your own photo of the real item or service. Saccharum checks every image before it is shown."
+      />
 
       <Field
         label="Headline"

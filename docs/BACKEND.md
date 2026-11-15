@@ -47,6 +47,25 @@ Up to `promote_settings.refund_approval_limit` (R500 in the seed) a finance user
 calls `hq_decide_refund`. Cash refunds revoke an equal amount of released credit by default so money is not returned
 twice. VAT on the unused share needs a credit note from Finance.
 
+## Delivering notifications by push and email
+
+`supabase/functions/send-notifications` sends a row from `notifications` to the user's phones (Expo push) and inbox
+(Resend), respecting `profiles.push_enabled` and `email_enabled`, then stamps `delivered_at` so a replay never sends twice.
+Unregistered phones are removed from `push_tokens`.
+
+1. `supabase functions deploy send-notifications --no-verify-jwt`
+2. `supabase secrets set WEBHOOK_SECRET=<long random text> RESEND_API_KEY=<key> EMAIL_FROM="Loka <no-reply@your-domain>"`
+3. In the dashboard, Database > Webhooks: new webhook on table `notifications`, event Insert, type Supabase Edge Function,
+   add the header `x-webhook-secret` with the same value as `WEBHOOK_SECRET`.
+4. For push, build the app with EAS (`eas init` adds `extra.eas.projectId` to `app.json`). Push tokens do not work in Expo Go
+   on recent SDKs and need a real device.
+
+## Images
+
+Adverts upload to the public `ad-media` bucket and payment proofs to the private `payment-proofs` bucket, always under a
+folder named after the user's id. HQ opens proofs through signed links that expire after 5 minutes. Advert images are
+publicly readable by address from the moment of upload, before review; the addresses are random and unlisted.
+
 ## Notifications
 
 A trigger on `campaigns.status` writes to `notifications`, quoting the latest moderation reason. Users can read their

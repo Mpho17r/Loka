@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
@@ -7,6 +7,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppStateProvider, useApp } from './src/store/AppState';
 import { colors } from './src/theme';
+import { configureForegroundNotifications } from './src/lib/push';
 import type { RootStackParamList, TabParamList } from './src/navigation/types';
 import HomeScreen from './src/screens/HomeScreen';
 import MarketScreen from './src/screens/MarketScreen';
@@ -67,6 +68,7 @@ function Root() {
 }
 
 export default function App() {
+  useEffect(() => { configureForegroundNotifications(); }, []);
   return (
     <SafeAreaProvider>
       <AppStateProvider>

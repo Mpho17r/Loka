@@ -10,7 +10,7 @@ import type { Ad, AppNotification, Campaign, CampaignStatus, HqManaged, HqReport
  */
 export function createDemoApi(): Api {
   let signedIn = true;
-  let profile: Profile = { id: 'demo-user', fullName: 'Demo User', verification: 'business', isPremium: false, countryCode: 'ZA', roles: ['owner'] };
+  let profile: Profile = { id: 'demo-user', fullName: 'Demo User', verification: 'business', isPremium: false, countryCode: 'ZA', roles: ['owner'], pushEnabled: true, emailEnabled: true };
   let products: Product[] = [...PRODUCTS];
   let services: Service[] = [...SERVICES];
   let campaigns: Campaign[] = [];
@@ -119,6 +119,10 @@ export function createDemoApi(): Api {
     },
     async loadNotifications() { return notifications; },
     async markNotificationsRead() { notifications = notifications.map((n) => ({ ...n, read: true })); },
+    async registerPushToken() { /* demo: nothing to register */ },
+    async setDeliveryPrefs(prefs) {
+      profile = { ...profile, pushEnabled: prefs.push ?? profile.pushEnabled, emailEnabled: prefs.email ?? profile.emailEnabled };
+    },
     async cancelRequest(id) { requests = requests.map((r) => (r.id === id ? { ...r, status: 'Cancelled' } : r)); },
 
     async quote(req: QuoteRequest, p, bal) {
@@ -131,7 +135,7 @@ export function createDemoApi(): Api {
       const free = quote.total === 0;
       const end = new Date(); end.setUTCDate(end.getUTCDate() + input.days - 1);
       campaigns = [{
-        id, accountId: 'demo-acct', advertiser: p.fullName, targetType: input.targetType, targetId: input.targetId, targetTitle: input.targetTitle,
+        id, accountId: 'demo-acct', advertiser: p.fullName, targetType: input.targetType, targetId: input.targetId, targetTitle: input.targetTitle, mediaPath: input.media?.uri,
         headline: input.headline, placement: input.placement, city: input.city, impressions: input.impressions, delivered: 0, clicks: 0, days: input.days,
         startDate: today(), endDate: end.toISOString().slice(0, 10), status: 'Pending review', pausedByHq: false, quote,
         invoice: { id: 'i' + counter, number: 'LK-DEMO-' + String(counter).padStart(6, '0'), status: free ? 'verified' : 'issued', total: quote.total },
@@ -148,10 +152,10 @@ export function createDemoApi(): Api {
         set(id, { status: 'Cancelled' }); release(c);
       } else throw new Error('action_not_allowed_in_status');
     },
-    async declarePayment(invoiceId) {
+    async declarePayment(invoiceId, _reference, proof) {
       const c = campaigns.find((x) => x.invoice.id === invoiceId);
       if (!c || c.invoice.status !== 'issued') throw new Error('invoice_not_awaiting_payment');
-      set(c.id, { invoice: { ...c.invoice, status: 'paid_declared' } });
+      set(c.id, { invoice: { ...c.invoice, status: 'paid_declared', proofPath: proof?.uri } });
     },
     async reportAd(campaignId, reason) {
       const c = find(campaignId);
@@ -167,7 +171,7 @@ export function createDemoApi(): Api {
         .filter((c) => c.status === 'Live' && c.placement === placement && c.delivered < c.impressions && (c.city === ALL_CITIES || c.city === city)
           && (shown.get(c.id) ?? 0) < 3)
         .slice(0, 1)
-        .map((c) => ({ campaignId: c.id, headline: c.headline, description: '', targetType: c.targetType, targetId: c.targetId, placement: c.placement }));
+        .map((c) => ({ campaignId: c.id, headline: c.headline, description: '', mediaPath: c.mediaPath, targetType: c.targetType, targetId: c.targetId, placement: c.placement }));
     },
     async recordImpression(campaignId) {
       const c = campaigns.find((x) => x.id === campaignId);

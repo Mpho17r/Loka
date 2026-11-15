@@ -8,6 +8,8 @@ export interface Profile {
   isPremium: boolean;
   countryCode: string;
   roles: Role[];
+  pushEnabled: boolean;
+  emailEnabled: boolean;
 }
 
 export interface Product {
@@ -43,6 +45,9 @@ export interface Service {
   description: string;
   emoji: string;
 }
+
+/** An image chosen from the phone's library, ready to upload. */
+export interface PickedImage { uri: string; mime: string; base64: string; bytes: number }
 
 export type Placement = 'homepage' | 'search' | 'category' | 'listing';
 
@@ -81,6 +86,7 @@ export interface Invoice {
   number: string;
   status: InvoiceStatus;
   total: number;
+  proofPath?: string;
 }
 
 export interface Campaign {
@@ -91,6 +97,7 @@ export interface Campaign {
   targetId: string;
   targetTitle: string;
   headline: string;
+  mediaPath?: string;
   placement: Placement;
   city: string; // 'All cities' for national
   impressions: number;
@@ -110,6 +117,7 @@ export interface Ad {
   campaignId: string;
   headline: string;
   description: string;
+  mediaPath?: string;
   targetType: 'product' | 'service';
   targetId: string;
   placement: Placement;
@@ -125,6 +133,7 @@ export interface CampaignInput {
   impressions: number;
   days: number;
   useCredit: boolean;
+  media?: PickedImage;
 }
 
 export type RequestStatus = 'Submitted' | 'Under review' | 'Quoted' | 'Accepted' | 'Completed' | 'Cancelled';

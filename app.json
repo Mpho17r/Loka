@@ -22,6 +22,20 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Loka uses your photos so you can attach an image to an advert or a proof of payment."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#1F6F5C"
+        }
+      ]
+    ]
   }
 }

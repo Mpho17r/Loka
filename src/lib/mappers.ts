@@ -52,6 +52,7 @@ export function mapProfile(p: Row, roles: Row[]): Profile {
   return {
     id: p.id, fullName: p.full_name ?? '', verification: p.verification, isPremium: !!p.is_premium,
     countryCode: p.country_code, roles: roles.map((r) => r.role as Role),
+    pushEnabled: p.push_enabled !== false, emailEnabled: p.email_enabled !== false,
   };
 }
 
@@ -72,10 +73,10 @@ export function mapCampaign(c: Row, titleFor: (type: 'product' | 'service', id: 
   const inv = Array.isArray(c.invoices) ? c.invoices[0] : c.invoices;
   const revs: Row[] = c.campaign_revisions ?? [];
   const live = revs.find((r) => r.is_live) ?? revs[0];
-  const invoice: Invoice = { id: inv.id, number: inv.number, status: inv.status, total: num(inv.total) };
+  const invoice: Invoice = { id: inv.id, number: inv.number, status: inv.status, total: num(inv.total), proofPath: inv.proof_path ?? undefined };
   return {
     id: c.id, accountId: c.account_id, advertiser, targetType: c.target_type, targetId: c.target_id,
-    targetTitle: titleFor(c.target_type, c.target_id), headline: live?.headline ?? '',
+    targetTitle: titleFor(c.target_type, c.target_id), headline: live?.headline ?? '', mediaPath: live?.media_path ?? undefined,
     placement: c.placement as Placement, city: c.city ?? ALL_CITIES, impressions: c.impressions_bought,
     delivered: c.impressions_delivered, clicks: c.clicks, days: dayDiff(c.start_date, c.end_date),
     startDate: c.start_date, endDate: c.end_date, status: statusLabel(c.status), pausedByHq: !!c.paused_by_hq,

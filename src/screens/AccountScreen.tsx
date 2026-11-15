@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Platform, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Chip, Field, H1, H2, Muted, Screen, StatusPill, VerifiedBadge } from '../components/ui';
@@ -7,6 +7,7 @@ import { colors } from '../theme';
 import { useApp } from '../store/AppState';
 import { friendlyError } from '../lib/errors';
 import { formatZAR } from '../lib/pricing';
+import { getPushToken } from '../lib/push';
 import type { RootStackParamList } from '../navigation/types';
 
 export default function AccountScreen() {
@@ -52,6 +53,22 @@ export default function AccountScreen() {
 
   const activeRequests = requests.filter((r) => r.status !== 'Cancelled');
 
+  const togglePush = async () => {
+    if (profile.pushEnabled) { const err = await run(() => api.setDeliveryPrefs({ push: false })); if (err) Alert.alert('Could not save', err); return; }
+    if (mode === 'supabase') {
+      const t = await getPushToken();
+      if (!t.ok) { Alert.alert('Push notifications', t.reason); return; }
+      const err = await run(async () => { await api.registerPushToken(t.token, Platform.OS); await api.setDeliveryPrefs({ push: true }); });
+      if (err) Alert.alert('Could not save', err);
+    } else {
+      await run(() => api.setDeliveryPrefs({ push: true }));
+    }
+  };
+  const toggleEmail = async () => {
+    const err = await run(() => api.setDeliveryPrefs({ email: !profile.emailEnabled }));
+    if (err) Alert.alert('Could not save', err);
+  };
+
   return (
     <Screen>
       <H1>{profile.fullName || 'Your account'}</H1>
@@ -66,6 +83,15 @@ export default function AccountScreen() {
           <Muted>Verification builds trust and is required to advertise. Contact Saccharum support to get verified.</Muted>
         </Card>
       ) : null}
+
+      <H2>Alerts</H2>
+      <Card>
+        <Muted style={{ marginBottom: 8 }}>Get told when an advert is approved, goes live, needs changes or finishes.</Muted>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Chip label={`Push: ${profile.pushEnabled ? 'on' : 'off'}`} selected={profile.pushEnabled} onPress={togglePush} />
+          <Chip label={`Email: ${profile.emailEnabled ? 'on' : 'off'}`} selected={profile.emailEnabled} onPress={toggleEmail} />
+        </View>
+      </Card>
 
       {notifications.length > 0 ? (
         <View>

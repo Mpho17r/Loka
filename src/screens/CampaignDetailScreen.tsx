@@ -1,3 +1,4 @@
+import { AdImage, ImagePickerField } from '../components/media';
 import React, { useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
@@ -5,7 +6,7 @@ import { Button, Card, Empty, Field, H2, Muted, ProgressBar, Row, Screen, Status
 import { colors } from '../theme';
 import { PLACEMENTS, formatZAR } from '../lib/pricing';
 import { useApp } from '../store/AppState';
-import type { CampaignStatus } from '../types';
+import type { CampaignStatus, PickedImage } from '../types';
 import type { RootStackParamList } from '../navigation/types';
 
 export function statusTone(s: CampaignStatus): 'neutral' | 'good' | 'warn' | 'bad' {
@@ -28,6 +29,7 @@ export default function CampaignDetailScreen() {
   const { params } = useRoute<RouteProp<RootStackParamList, 'CampaignDetail'>>();
   const { api, campaigns, run } = useApp();
   const [reference, setReference] = useState('');
+  const [proof, setProof] = useState<PickedImage | undefined>(undefined);
   const c = campaigns.find((x) => x.id === params.id);
 
   if (!c) return <Screen><Empty title="Campaign not found" body="It may have been removed." /></Screen>;
@@ -50,6 +52,7 @@ export default function CampaignDetailScreen() {
       <View style={{ marginBottom: 8 }}><StatusPill label={c.status} tone={statusTone(c.status)} /></View>
       {STATUS_HELP[c.status] ? <Muted style={{ marginBottom: 12 }}>{STATUS_HELP[c.status]}</Muted> : null}
 
+      <AdImage path={c.mediaPath} height={160} />
       <H2>Performance</H2>
       <Card>
         <Row label="Impressions" value={`${c.delivered.toLocaleString('en-ZA')} of ${c.impressions.toLocaleString('en-ZA')}`} />
@@ -85,7 +88,8 @@ export default function CampaignDetailScreen() {
             Pay {formatZAR(c.invoice.total)} using reference {c.invoice.number}. Saccharum will give you the banking details. Then tell us you paid; the campaign only goes live after Saccharum verifies the payment.
           </Muted>
           <Field label="Your payment reference" value={reference} onChangeText={setReference} placeholder="e.g. EFT reference" />
-          <Button label="I have paid" onPress={() => act(() => api.declarePayment(c.invoice.id, reference))} disabled={reference.trim().length < 3} />
+          <ImagePickerField label="Proof of payment (optional)" value={proof} onChange={setProof} hint="A photo or screenshot of your bank confirmation helps Saccharum verify faster." />
+          <Button label="I have paid" onPress={() => act(() => api.declarePayment(c.invoice.id, reference, proof))} disabled={reference.trim().length < 3} />
         </Card>
       ) : null}
 

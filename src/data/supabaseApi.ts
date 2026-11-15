@@ -1,6 +1,7 @@
 import type { Api, HqDecision, ListingFilter, MineData, Page, QuoteRequest } from './api';
 import { getViewerKey, supabase } from '../lib/supabase';
 import { ALL_CITIES } from '../lib/pricing';
+import { uploadImage } from '../lib/media';
 import { mapCampaign, mapProduct, mapProfile, mapQuote, mapRequest, mapService } from '../lib/mappers';
 import type { Ad, AppNotification, Campaign, HqData, HqReport, Placement, Product, Quote } from '../types';
 
@@ -167,6 +168,21 @@ export const supabaseApi: Api = {
     }));
   },
 
+  async registerPushToken(token, platform) {
+    const { data } = await client().auth.getUser();
+    if (!data.user) throw new Error('not_signed_in');
+    ok(await client().from('push_tokens').upsert({ user_id: data.user.id, token, platform }, { onConflict: 'user_id,token', ignoreDuplicates: true }));
+  },
+
+  async setDeliveryPrefs(prefs) {
+    const { data } = await client().auth.getUser();
+    if (!data.user) throw new Error('not_signed_in');
+    const patch: Record<string, boolean> = {};
+    if (prefs.push !== undefined) patch.push_enabled = prefs.push;
+    if (prefs.email !== undefined) patch.email_enabled = prefs.email;
+    ok(await client().from('profiles').update(patch).eq('id', data.user.id));
+  },
+
   async markNotificationsRead() {
     ok(await client().from('notifications').update({ read: true }).eq('read', false));
   },
@@ -184,12 +200,13 @@ export const supabaseApi: Api = {
     return mapQuote(q);
   },
 
-  async createCampaign(input, _profile, _balance) {
+  async createCampaign(input, profile, _balance) {
+    const mediaPath = input.media ? await uploadImage('ad-media', profile.id, input.media) : null;
     const id = ok<string>(await client().rpc('create_campaign', {
       p_target_type: input.targetType, p_target_id: input.targetId, p_headline: input.headline, p_description: '',
       p_cta: 'View', p_placement: input.placement, p_format: 'image',
       p_city: input.city === ALL_CITIES ? null : input.city, p_impressions: input.impressions,
-      p_start: utcDate(0), p_end: utcDate(input.days - 1), p_use_credit: input.useCredit, p_accept_terms: true,
+      p_start: utcDate(0), p_end: utcDate(input.days - 1), p_use_credit: input.useCredit, p_accept_terms: true, p_media_path: mediaPath,
     }));
     return id;
   },
@@ -198,8 +215,11 @@ export const supabaseApi: Api = {
     ok(await client().rpc('advertiser_set_state', { p_campaign: id, p_action: action }));
   },
 
-  async declarePayment(invoiceId, reference) {
-    ok(await client().rpc('advertiser_declare_payment', { p_invoice: invoiceId, p_proof_path: null, p_reference: reference }));
+  async declarePayment(invoiceId, reference, proof) {
+    const { data } = await client().auth.getUser();
+    if (proof && !data.user) throw new Error('not_signed_in');
+    const proofPath = proof && data.user ? await uploadImage('payment-proofs', data.user.id, proof) : null;
+    ok(await client().rpc('advertiser_declare_payment', { p_invoice: invoiceId, p_proof_path: proofPath, p_reference: reference }));
   },
 
   async reportAd(campaignId, reason, profile) {
@@ -217,7 +237,7 @@ export const supabaseApi: Api = {
       p_placement: placement, p_city: city === ALL_CITIES ? null : city, p_viewer_key: await getViewerKey(), p_limit: 1,
     }));
     return rows.map((r) => ({
-      campaignId: r.campaign_id, headline: r.headline, description: r.description ?? '',
+      campaignId: r.campaign_id, headline: r.headline, description: r.description ?? '', mediaPath: r.media_path ?? undefined,
       targetType: r.target_type, targetId: r.target_id, placement: r.placement,
     }));
   },

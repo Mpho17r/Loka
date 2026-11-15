@@ -54,26 +54,33 @@ accountant and set real prices in the HQ price book before real customers pay an
 - **Notifications:** advertisers are told when a campaign is approved, paid, live, rejected, needs changes, paused or
   stopped by HQ, finished (with the HQ reason). Shown in the Account tab with an unread badge. Their own
   pause, resume and cancel do not notify them.
+- **Search:** Market and Services search on the server (partial-text match, category, city) and load 20 at a time
+  with "Load more"; listings opened from an advert are fetched by id.
+- **Images:** advertisers can attach an image to an advert and a photo of their proof of payment (JPG, PNG or
+  WebP, up to 5 MB). Adverts show the image; HQ sees it in the review queue and opens payment proofs through a
+  5-minute signed link.
+- **Push and email:** Account > Alerts switches each on or off. The `send-notifications` Edge Function sends the
+  push (Expo) and email (Resend) when a notification row is created. See `docs/BACKEND.md`.
 - **Security:** row-level security on every table. App users cannot write campaigns, invoices, credits or prices
   directly; they call database functions that re-check who they are. HQ roles are limited by country.
 
 ## Tests
 
-- `npm test`: pricing engine and the demo back end (12 tests).
-- `npm run test:db`: applies every migration to a throwaway Postgres and runs 118 checks: the R713.00 worked
+- `npm test`: pricing engine and the demo back end (18 tests, including image checks and the notification-delivery logic).
+- `npm run test:db`: applies every migration to a throwaway Postgres and runs 127 checks: the R713.00 worked
   example, who may do what, payment and approval gates, frequency caps, credit return on cancel and reject,
   refunds and the two-person rule, notifications, price-book permissions, scheduled jobs, and a parallel test where
   20 sessions make 200 simultaneous attempts against 50 remaining impressions and exactly 50 are sold.
 
 ## Not built yet
 
-- Image and video upload in the app. The `ad-media` and `payment-proofs` storage buckets and their access rules
-  are in the migrations (they apply on Supabase); the app screens and the media scan are not built.
+- Video adverts and an automated media scan (images are uploaded; HQ checks them by eye).
 - Payment gateway. Payments are declared by the advertiser and verified by HQ, as in the plan. The
   `payment_records` table and `invoices.method` are ready for a gateway adapter.
-- Automated content scanning; email and push notifications (in-app ones are built); messaging.
-- Server-side search and paging (the app loads up to 500 active listings per type); partitioning of the raw
-  impression tables for high traffic.
+- Messaging between buyers and sellers.
+- Partitioning of the raw impression tables for high traffic.
+- Push and email have never been sent to a real phone or inbox: the function's logic is tested, but you must deploy it,
+  set the secrets and try it (steps in `docs/BACKEND.md`).
 - Real-device testing. The app type-checks and bundles for Android, but has not been run on a phone.
 - Lint: `npx expo lint` needs to download its config; run it once on your machine.
 
