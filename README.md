@@ -54,6 +54,10 @@ accountant and set real prices in the HQ price book before real customers pay an
 - **Notifications:** advertisers are told when a campaign is approved, paid, live, rejected, needs changes, paused or
   stopped by HQ, finished (with the HQ reason). Shown in the Account tab with an unread badge. Their own
   pause, resume and cancel do not notify them.
+- **Look and feel:** soft mint backgrounds, deep-green pill buttons, rounded white cards, a floating tab bar with
+  Promote as the raised middle button, a swipeable banner, category tiles, "Top picks" rails, a price tab and a pinned
+  action bar on listing pages, and hearts to save listings (kept on the phone). Colours and radii live in `src/theme.ts`;
+  the shared pieces are in `src/components/ui.tsx`, `TabBar.tsx` and `detail.tsx`.
 - **Search:** Market and Services search on the server (partial-text match, category, city) and load 20 at a time
   with "Load more"; listings opened from an advert are fetched by id.
 - **Images:** advertisers can attach an image to an advert and a photo of their proof of payment (JPG, PNG or

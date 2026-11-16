@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Card, ChipRow, Empty, ListFooter, Muted, Screen, VerifiedBadge } from '../components/ui';
-import { colors } from '../theme';
+import { ChipRow, Empty, ListFooter, ListingCard, Screen, SearchBar } from '../components/ui';
 import { CITIES, PRODUCT_CATEGORIES, VIEWER_CITY } from '../data/sample';
 import { SponsoredSlot } from '../components/SponsoredSlot';
 import { ALL_CITIES, formatZAR } from '../lib/pricing';
@@ -13,10 +12,13 @@ import type { Product } from '../types';
 import type { RootStackParamList } from '../navigation/types';
 
 const PAGE_SIZE = 20;
+const GAP = 12;
 
 export default function MarketScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { api, cacheListings } = useApp();
+  const { api, cacheListings, favourites, toggleFavourite } = useApp();
+  const { width } = useWindowDimensions();
+  const cardW = (width - 32 - GAP) / 2;
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('All');
   const [city, setCity] = useState(ALL_CITIES);
@@ -33,17 +35,7 @@ export default function MarketScreen() {
 
   return (
     <Screen>
-      <TextInput
-        value={q}
-        onChangeText={setQ}
-        placeholder="Search products"
-        placeholderTextColor={colors.muted}
-        accessibilityLabel="Search products"
-        style={{
-          backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 10,
-          paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, marginBottom: 12, color: colors.ink,
-        }}
-      />
+      <SearchBar value={q} onChangeText={setQ} placeholder="Search products" />
       <ChipRow options={PRODUCT_CATEGORIES} value={category} onChange={setCategory} />
       <ChipRow options={[ALL_CITIES, ...CITIES]} value={city} onChange={setCity} />
 
@@ -52,21 +44,15 @@ export default function MarketScreen() {
       {!loading && !error && results.length === 0 ? (
         <Empty title="Nothing found" body="Try a different search, category or city." />
       ) : (
-        results.map((p) => (
-          <Card key={p.id} onPress={() => nav.navigate('ProductDetail', { id: p.id })}>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Text style={{ fontSize: 40 }}>{p.emoji}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>{p.title}</Text>
-                <Text style={{ fontSize: 17, fontWeight: '800', color: colors.primary, marginVertical: 2 }}>{formatZAR(p.price)}</Text>
-                <Muted>{p.condition} · {p.city} · {p.seller}</Muted>
-                <View style={{ marginTop: 6 }}>
-                  <VerifiedBadge level={p.verification} />
-                </View>
-              </View>
-            </View>
-          </Card>
-        ))
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: GAP }}>
+          {results.map((p) => (
+            <ListingCard
+              key={p.id} width={cardW} emoji={p.emoji} title={p.title} subtitle={`${p.condition} · ${p.city}`} price={formatZAR(p.price)}
+              saved={favourites.includes(p.id)} onToggleSaved={() => toggleFavourite(p.id)}
+              onPress={() => nav.navigate('ProductDetail', { id: p.id })}
+            />
+          ))}
+        </View>
       )}
       <ListFooter loading={loading} loadingMore={loadingMore} hasMore={hasMore} error={error} onMore={loadMore} onRetry={retry} />
     </Screen>

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Card, ChipRow, Empty, H2, ListFooter, Muted, Screen, StatusPill, VerifiedBadge } from '../components/ui';
+import { Card, ChipRow, Empty, H2, ListFooter, Muted, Screen, SearchBar, StatusPill, VerifiedBadge } from '../components/ui';
 import { usePagedSearch } from '../lib/usePagedSearch';
 import { colors } from '../theme';
 import { CITIES, SERVICE_CATEGORIES, VIEWER_CITY } from '../data/sample';
@@ -56,17 +56,7 @@ export default function ServicesScreen() {
         </View>
       ) : null}
 
-      <TextInput
-        value={q}
-        onChangeText={setQ}
-        placeholder="Search services"
-        placeholderTextColor={colors.muted}
-        accessibilityLabel="Search services"
-        style={{
-          backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 10,
-          paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, marginBottom: 12, color: colors.ink,
-        }}
-      />
+      <SearchBar value={q} onChangeText={setQ} placeholder="Search services" />
       <ChipRow options={SERVICE_CATEGORIES} value={category} onChange={setCategory} />
       <ChipRow options={[ALL_CITIES, ...CITIES]} value={city} onChange={setCity} />
 
@@ -78,7 +68,7 @@ export default function ServicesScreen() {
         results.map((s) => (
           <Card key={s.id} onPress={() => nav.navigate('ServiceDetail', { id: s.id })}>
             <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Text style={{ fontSize: 36 }}>{s.emoji}</Text>
+              <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 34 }}>{s.emoji}</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>{s.title}</Text>
                 <Muted>{s.provider} · {s.city} · {s.delivery}</Muted>

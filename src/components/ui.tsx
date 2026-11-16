@@ -1,14 +1,30 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from 'react-native';
-import { colors, radius, spacing } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, radius, shadow, spacing } from '../theme';
 import type { Verification } from '../types';
 
-export function Screen({ children, scroll = true, style }: { children: React.ReactNode; scroll?: boolean; style?: ViewStyle }) {
-  if (!scroll) return <View style={[s.screen, style]}>{children}</View>;
+/** Soft mint background that every screen sits on. */
+export function Backdrop({ children }: { children: React.ReactNode }) {
   return (
-    <ScrollView style={s.screen} contentContainerStyle={[{ padding: spacing.lg, paddingBottom: 48 }, style]} keyboardShouldPersistTaps="handled">
+    <LinearGradient colors={[colors.bgTop, colors.bg, colors.bgBottom]} locations={[0, 0.35, 1]} style={{ flex: 1 }}>
       {children}
-    </ScrollView>
+    </LinearGradient>
+  );
+}
+
+/** Bottom padding leaves room for the floating tab bar. */
+export const TAB_SPACE = 120;
+
+export function Screen({ children, scroll = true, style }: { children: React.ReactNode; scroll?: boolean; style?: ViewStyle }) {
+  if (!scroll) return <Backdrop><View style={[s.screen, style]}>{children}</View></Backdrop>;
+  return (
+    <Backdrop>
+      <ScrollView style={s.screen} contentContainerStyle={[{ padding: spacing.lg, paddingBottom: TAB_SPACE }, style]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        {children}
+      </ScrollView>
+    </Backdrop>
   );
 }
 
@@ -36,7 +52,7 @@ export function Card({ children, onPress, style }: { children: React.ReactNode; 
 export function Button({
   label, onPress, variant = 'primary', disabled, style,
 }: { label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'danger'; disabled?: boolean; style?: ViewStyle }) {
-  const bg = variant === 'primary' ? colors.primary : variant === 'danger' ? colors.danger : 'transparent';
+  const bg = variant === 'primary' ? colors.primary : variant === 'danger' ? colors.danger : '#FFFFFF';
   const fg = variant === 'secondary' ? colors.primary : '#fff';
   return (
     <Pressable
@@ -46,7 +62,7 @@ export function Button({
       accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         s.btn,
-        { backgroundColor: bg, borderColor: variant === 'secondary' ? colors.primary : bg, opacity: disabled ? 0.45 : pressed ? 0.85 : 1 },
+        { backgroundColor: bg, borderColor: variant === 'secondary' ? colors.line : bg, opacity: disabled ? 0.45 : pressed ? 0.85 : 1 },
         style,
       ]}
     >
@@ -61,7 +77,7 @@ export function Chip({ label, selected, onPress }: { label: string; selected?: b
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: !!selected }}
-      style={[s.chip, selected && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+      style={[s.chip, selected && { backgroundColor: colors.primary, borderColor: colors.primary, ...shadow }]}
     >
       <Text style={[s.chipText, selected && { color: '#fff' }]}>{label}</Text>
     </Pressable>
@@ -98,7 +114,7 @@ const VERIFY_LABEL: Record<Verification, string> = {
 export function VerifiedBadge({ level }: { level: Verification }) {
   const ok = level !== 'unverified';
   return (
-    <View style={[s.badge, { backgroundColor: ok ? '#E3F1EC' : '#EEE' }]}>
+    <View style={[s.badge, { backgroundColor: ok ? colors.accentSoft : '#EEF2EF' }]}>
       <Text style={[s.badgeText, { color: ok ? colors.primaryDark : colors.muted }]}>{ok ? '✓ ' : ''}{VERIFY_LABEL[level]}</Text>
     </View>
   );
@@ -114,8 +130,8 @@ export function SponsoredTag() {
 
 export function StatusPill({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'good' | 'warn' | 'bad' }) {
   const map = {
-    neutral: ['#ECECEC', colors.ink],
-    good: ['#DDF0E4', colors.ok],
+    neutral: ['#E6EEE9', colors.ink],
+    good: [colors.accentSoft, colors.ok],
     warn: ['#FBEFD5', colors.warn],
     bad: ['#F6DDDA', colors.danger],
   } as const;
@@ -154,29 +170,29 @@ export function Empty({ title, body }: { title: string; body: string }) {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  h1: { fontSize: 26, fontWeight: '800', color: colors.ink, marginBottom: spacing.sm },
-  h2: { fontSize: 18, fontWeight: '700', color: colors.ink, marginBottom: spacing.sm },
+  screen: { flex: 1 },
+  h1: { fontSize: 28, fontWeight: '800', color: colors.ink, marginBottom: spacing.sm, letterSpacing: -0.3 },
+  h2: { fontSize: 19, fontWeight: '800', color: colors.ink, marginBottom: spacing.sm },
   muted: { fontSize: 13, color: colors.muted, lineHeight: 18 },
   card: {
-    backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg,
-    borderWidth: 1, borderColor: colors.line, marginBottom: spacing.md,
+    backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg,
+    marginBottom: spacing.md, ...shadow,
   },
-  btn: { borderRadius: radius.md, paddingVertical: 14, paddingHorizontal: spacing.lg, alignItems: 'center', borderWidth: 1.5 },
+  btn: { borderRadius: radius.pill, paddingVertical: 16, paddingHorizontal: spacing.xl, alignItems: 'center', borderWidth: 1.5 },
   btnText: { fontSize: 16, fontWeight: '700' },
-  chip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+  chip: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
   chipText: { fontSize: 14, color: colors.ink, fontWeight: '600' },
   label: { fontSize: 14, fontWeight: '700', color: colors.ink, marginBottom: 6 },
   input: {
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, borderRadius: radius.sm,
-    paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, color: colors.ink,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md,
+    paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: colors.ink,
   },
-  badge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
   badgeText: { fontSize: 12, fontWeight: '700' },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
   rowLabel: { fontSize: 15, color: colors.muted, flexShrink: 1, paddingRight: 8 },
   rowValue: { fontSize: 15, color: colors.ink },
-  track: { height: 8, borderRadius: 4, backgroundColor: '#E8E5DC', overflow: 'hidden', marginVertical: 6 },
+  track: { height: 8, borderRadius: 4, backgroundColor: colors.accentSoft, overflow: 'hidden', marginVertical: 6 },
   fill: { height: 8, backgroundColor: colors.primary },
 });
 
@@ -195,4 +211,87 @@ export function ListFooter({ loading, loadingMore, hasMore, error, onMore, onRet
   if (loading || loadingMore) return <ActivityIndicator color={colors.primary} style={{ margin: spacing.lg }} accessibilityLabel="Loading" />;
   if (hasMore) return <Button label="Load more" variant="secondary" onPress={onMore} />;
   return null;
+}
+
+// ---------------------------------------------------------------- building blocks for the rounded, mint look
+
+/** Round white button with an icon (back, share, heart...). */
+export function RoundIconButton({ name, onPress, label, active, size = 48 }: {
+  name: React.ComponentProps<typeof Ionicons>['name']; onPress: () => void; label: string; active?: boolean; size?: number;
+}) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
+      style={({ pressed }) => [{ width: size, height: size, borderRadius: size * 0.34, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1 }, shadow]}>
+      <Ionicons name={name} size={size * 0.46} color={active ? colors.danger : colors.primary} />
+    </Pressable>
+  );
+}
+
+/** Heart that sits on a product card. */
+export function HeartButton({ on, onPress }: { on: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={10} accessibilityRole="button" accessibilityLabel={on ? 'Remove from saved' : 'Save'} accessibilityState={{ selected: on }}>
+      <Ionicons name={on ? 'heart' : 'heart-outline'} size={24} color={on ? colors.danger : colors.primary} />
+    </Pressable>
+  );
+}
+
+/** Rounded white search field with a magnifier. With onPress it acts as a button that opens search. */
+export function SearchBar({ value, onChangeText, placeholder, onPress }: { value?: string; onChangeText?: (t: string) => void; placeholder: string; onPress?: () => void }) {
+  const inner = (
+    <View style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: radius.pill, paddingHorizontal: 16, height: 52, marginBottom: spacing.md }, shadow]}>
+      <Ionicons name="search" size={20} color={colors.muted} />
+      {onPress ? (
+        <Text style={{ marginLeft: 10, fontSize: 16, color: colors.muted }}>{placeholder}</Text>
+      ) : (
+        <TextInput value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.muted} accessibilityLabel={placeholder}
+          style={{ flex: 1, marginLeft: 10, fontSize: 16, color: colors.ink }} />
+      )}
+    </View>
+  );
+  return onPress ? <Pressable onPress={onPress} accessibilityRole="search" accessibilityLabel={placeholder}>{inner}</Pressable> : inner;
+}
+
+/** Title with a "View all" link on the right. */
+export function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: spacing.lg, marginBottom: spacing.sm }}>
+      <Text style={[s.h2, { marginBottom: 0 }]}>{title}</Text>
+      {action ? <Pressable onPress={onAction} accessibilityRole="link"><Text style={{ color: colors.ok, fontWeight: '700', fontSize: 15 }}>{action}</Text></Pressable> : null}
+    </View>
+  );
+}
+
+/** One square shortcut in the row under the banner. The selected one is filled deep green. */
+export function IconTile({ icon, label, selected, onPress }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; selected?: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: !!selected }} accessibilityLabel={label}
+      style={[{ width: 72, paddingVertical: 12, borderRadius: radius.md, alignItems: 'center', backgroundColor: selected ? colors.primary : 'transparent' }, selected && shadow]}>
+      <Ionicons name={icon} size={26} color={selected ? '#fff' : colors.primary} />
+      <Text numberOfLines={1} style={{ marginTop: 6, fontSize: 13, fontWeight: '600', color: selected ? '#fff' : colors.ink }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** Product card for horizontal rails and grids: mint picture tile, heart, title, price and a go button. */
+export function ListingCard({ emoji, title, subtitle, price, saved, onToggleSaved, onPress, width }: {
+  emoji: string; title: string; subtitle: string; price: string; saved: boolean; onToggleSaved: () => void; onPress: () => void; width?: number;
+}) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}, ${price}`}
+      style={({ pressed }) => [{ width, backgroundColor: '#fff', borderRadius: radius.lg, padding: 10, opacity: pressed ? 0.9 : 1 }, shadow]}>
+      <LinearGradient colors={['#F2FBF6', '#D3EFE0']} style={{ height: 128, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 58 }}>{emoji}</Text>
+        <View style={{ position: 'absolute', top: 10, left: 10 }}><HeartButton on={saved} onPress={onToggleSaved} /></View>
+      </LinearGradient>
+      <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '800', color: colors.ink, marginTop: 10 }}>{title}</Text>
+      <Text numberOfLines={1} style={{ fontSize: 13, color: colors.muted, marginTop: 2 }}>{subtitle}</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+        <Text style={{ fontSize: 17, fontWeight: '800', color: colors.ok }}>{price}</Text>
+        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="arrow-forward" size={18} color="#fff" />
+        </View>
+      </View>
+    </Pressable>
+  );
 }

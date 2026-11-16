@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Api } from '../data/api';
 import { createDemoApi } from '../data/demoApi';
 import { supabaseApi } from '../data/supabaseApi';
@@ -25,6 +26,9 @@ export interface AppState {
   balance: number;
   notifications: AppNotification[];
   unread: number;
+  /** Listing ids the person has hearted. Kept on this phone. */
+  favourites: string[];
+  toggleFavourite: (id: string) => void;
   hq: HqData | null;
   refresh: () => Promise<void>;
   refreshHq: () => Promise<void>;
@@ -54,6 +58,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [balance, setBalance] = useState(0);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [hq, setHq] = useState<HqData | null>(null);
+  const [favourites, setFavourites] = useState<string[]>([]);
+  useEffect(() => {
+    AsyncStorage.getItem('loka.favourites').then((v) => { if (v) { try { const a = JSON.parse(v); if (Array.isArray(a)) setFavourites(a.filter((x) => typeof x === 'string').slice(0, 200)); } catch { /* ignore */ } } }).catch(() => undefined);
+  }, []);
+  const toggleFavourite = useCallback((id: string) => {
+    setFavourites((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [id, ...prev].slice(0, 200);
+      AsyncStorage.setItem('loka.favourites', JSON.stringify(next)).catch(() => undefined);
+      return next;
+    });
+  }, []);
   const profileRef = useRef<Profile | null>(null);
 
   const isStaff = !!profile && profile.roles.length > 0;
@@ -114,8 +129,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const value = useMemo<AppState>(() => ({
-    api, mode: api.mode, ready, profile, isStaff, products, services, myProducts, myServices, cacheListings, campaigns, requests, balance, notifications, unread: notifications.filter((n) => !n.read).length, hq, refresh, refreshHq, run,
-  }), [api, ready, profile, isStaff, products, services, myProducts, myServices, cacheListings, campaigns, requests, balance, notifications, hq, refresh, refreshHq, run]);
+    api, mode: api.mode, ready, profile, isStaff, products, services, myProducts, myServices, cacheListings, campaigns, requests, balance, notifications, unread: notifications.filter((n) => !n.read).length, favourites, toggleFavourite, hq, refresh, refreshHq, run,
+  }), [api, ready, profile, isStaff, products, services, myProducts, myServices, cacheListings, campaigns, requests, balance, notifications, favourites, toggleFavourite, hq, refresh, refreshHq, run]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
