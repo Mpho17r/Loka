@@ -4,6 +4,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadow } from '../theme';
+import { Glass } from './ui';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -16,7 +17,6 @@ const ICONS: Record<string, { on: IconName; off: IconName; label: string }> = {
   HQ: { on: 'business', off: 'business-outline', label: 'HQ' },
 };
 const CENTER = 'Promote';
-const BAR = '#0B3A2D';
 
 /** A dark green pill floating above the content, with Promote as the raised round button in the middle. */
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -51,14 +51,14 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
   return (
     <View pointerEvents="box-none" style={{ position: 'absolute', left: 14, right: 14, bottom: Math.max(insets.bottom, 10) + 4 }}>
-      <View style={[{ flexDirection: 'row', alignItems: 'center', height: 68, borderRadius: 34, backgroundColor: BAR, paddingHorizontal: 8 }, shadow, { shadowOpacity: 0.3 }]}>
+      <Glass tint="dark" intensity={60} radiusSize={34} style={{ flexDirection: 'row', alignItems: 'center', height: 68, paddingHorizontal: 8 }}>
         <View style={{ flex: 1, flexDirection: 'row' }}>{left.map(tab)}</View>
         <View style={{ width: 84 }} />
         <View style={{ flex: 1, flexDirection: 'row' }}>{right.map(tab)}</View>
-      </View>
+      </Glass>
       {centerItem ? (
         <Pressable onPress={() => go(centerItem)} accessibilityRole="tab" accessibilityLabel="Promote" accessibilityState={{ selected: centerItem.focused }}
-          style={[{ position: 'absolute', alignSelf: 'center', top: -26, width: 72, height: 72, borderRadius: 36, backgroundColor: centerItem.focused ? colors.accent : '#2FB584', alignItems: 'center', justifyContent: 'center', borderWidth: 5, borderColor: '#EAF7F0' }, shadow]}>
+          style={[{ position: 'absolute', alignSelf: 'center', top: -26, width: 72, height: 72, borderRadius: 36, backgroundColor: centerItem.focused ? colors.accent : '#2FB584', alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: 'rgba(255,255,255,0.7)' }, shadow]}>
           <Ionicons name="megaphone" size={30} color="#fff" />
         </Pressable>
       ) : null}

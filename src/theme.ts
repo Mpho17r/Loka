@@ -25,3 +25,12 @@ export const shadow = {
   shadowOffset: { width: 0, height: 6 },
   elevation: 3,
 } as const;
+
+/** Frosted-glass look: a translucent white fill over a blur, with a bright hairline edge. */
+export const glass = {
+  fill: 'rgba(255,255,255,0.42)',
+  fillStrong: 'rgba(255,255,255,0.62)',
+  edge: 'rgba(255,255,255,0.78)',
+  dark: 'rgba(9,52,41,0.82)',
+  darkEdge: 'rgba(255,255,255,0.18)',
+};

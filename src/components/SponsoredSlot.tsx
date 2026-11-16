@@ -49,7 +49,7 @@ export function SponsoredSlot({ placement, city, targetType }: { placement: Plac
   };
 
   return (
-    <Card style={{ backgroundColor: colors.sponsoredBg, borderWidth: 1.5, borderColor: colors.accent }} onPress={open}>
+    <Card style={{ backgroundColor: 'rgba(61,220,151,0.24)', borderWidth: 1.5, borderColor: colors.accent }} onPress={open}>
       <SponsoredTag />
       <AdMedia path={ad.mediaPath} format={ad.format} height={150} feed />
       <Text style={{ fontSize: 17, fontWeight: '800', color: colors.ink, marginTop: 6 }}>{ad.headline}</Text>

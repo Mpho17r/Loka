@@ -2,15 +2,48 @@ import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radius, shadow, spacing } from '../theme';
+import { BlurView } from 'expo-blur';
+import { colors, glass, radius, shadow, spacing } from '../theme';
 import type { Verification } from '../types';
 
 /** Soft mint background that every screen sits on. */
 export function Backdrop({ children }: { children: React.ReactNode }) {
   return (
-    <LinearGradient colors={[colors.bgTop, colors.bg, colors.bgBottom]} locations={[0, 0.35, 1]} style={{ flex: 1 }}>
+    <LinearGradient colors={['#BFEBD3', '#DDF3EA', '#EAF6F4']} locations={[0, 0.5, 1]} style={{ flex: 1 }}>
+      {/* soft colour behind the glass, so the blur has something to frost */}
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={{ position: 'absolute', top: -70, right: -80, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(61,220,151,0.55)' }} />
+        <View style={{ position: 'absolute', top: 260, left: -120, width: 280, height: 280, borderRadius: 140, backgroundColor: 'rgba(56,189,248,0.30)' }} />
+        <View style={{ position: 'absolute', bottom: 40, right: -90, width: 320, height: 320, borderRadius: 160, backgroundColor: 'rgba(163,230,53,0.30)' }} />
+        <View style={{ position: 'absolute', bottom: 260, left: 30, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(14,75,58,0.18)' }} />
+      </View>
       {children}
     </LinearGradient>
+  );
+}
+
+const OUTER_KEYS = ['margin', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'marginHorizontal', 'marginVertical', 'flex', 'flexGrow', 'alignSelf', 'position', 'left', 'right', 'top', 'bottom'];
+
+/** Frosted glass panel. Layout styles (margin, width...) go on the outside; padding, fill and border on the glass itself. */
+export function Glass({ children, style, radiusSize = radius.lg, intensity = 45, tint = 'light', flat }: {
+  children?: React.ReactNode; style?: ViewStyle; radiusSize?: number; intensity?: number; tint?: 'light' | 'dark'; flat?: boolean;
+}) {
+  const flatStyle = (StyleSheet.flatten(style) ?? {}) as Record<string, unknown>;
+  const outer: Record<string, unknown> = {};
+  const inner: Record<string, unknown> = {};
+  Object.keys(flatStyle).forEach((k) => { (OUTER_KEYS.includes(k) ? outer : inner)[k] = flatStyle[k]; });
+  const dark = tint === 'dark';
+  const fill = (inner.backgroundColor as string | undefined) ?? (dark ? glass.dark : glass.fill);
+  delete inner.backgroundColor;
+  return (
+    <View style={[{ borderRadius: radiusSize }, !flat && shadow, outer, typeof flatStyle.width === 'number' ? { width: flatStyle.width as number } : null]}>
+      <BlurView intensity={intensity} tint="light" experimentalBlurMethod="dimezisBlurView"
+        style={[{ borderRadius: radiusSize, overflow: 'hidden', borderWidth: 1, borderColor: dark ? glass.darkEdge : glass.edge }, inner]}>
+        {/* the tint is a separate layer so it is not replaced by the blur's own background */}
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: fill }]} />
+        {children}
+      </BlurView>
+    </View>
   );
 }
 
@@ -39,20 +72,22 @@ export function Muted({ children, style }: { children: React.ReactNode; style?: 
 }
 
 export function Card({ children, onPress, style }: { children: React.ReactNode; onPress?: () => void; style?: ViewStyle }) {
+  const flat = (StyleSheet.flatten(style) ?? {}) as ViewStyle;
+  const body = <Glass style={{ padding: spacing.lg, marginBottom: spacing.md, ...flat }}>{children}</Glass>;
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => [s.card, style, pressed && { opacity: 0.85 }]} accessibilityRole="button">
-        {children}
+      <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)} accessibilityRole="button">
+        {body}
       </Pressable>
     );
   }
-  return <View style={[s.card, style]}>{children}</View>;
+  return body;
 }
 
 export function Button({
   label, onPress, variant = 'primary', disabled, style,
 }: { label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'danger'; disabled?: boolean; style?: ViewStyle }) {
-  const bg = variant === 'primary' ? colors.primary : variant === 'danger' ? colors.danger : '#FFFFFF';
+  const bg = variant === 'primary' ? colors.primary : variant === 'danger' ? colors.danger : glass.fillStrong;
   const fg = variant === 'secondary' ? colors.primary : '#fff';
   return (
     <Pressable
@@ -62,7 +97,7 @@ export function Button({
       accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         s.btn,
-        { backgroundColor: bg, borderColor: variant === 'secondary' ? colors.line : bg, opacity: disabled ? 0.45 : pressed ? 0.85 : 1 },
+        { backgroundColor: bg, borderColor: variant === 'secondary' ? glass.edge : bg, opacity: disabled ? 0.45 : pressed ? 0.85 : 1 },
         style,
       ]}
     >
@@ -180,11 +215,11 @@ const s = StyleSheet.create({
   },
   btn: { borderRadius: radius.pill, paddingVertical: 16, paddingHorizontal: spacing.xl, alignItems: 'center', borderWidth: 1.5 },
   btnText: { fontSize: 16, fontWeight: '700' },
-  chip: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+  chip: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: glass.edge, backgroundColor: glass.fillStrong },
   chipText: { fontSize: 14, color: colors.ink, fontWeight: '600' },
   label: { fontSize: 14, fontWeight: '700', color: colors.ink, marginBottom: 6 },
   input: {
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md,
+    backgroundColor: glass.fillStrong, borderWidth: 1, borderColor: glass.edge, borderRadius: radius.md,
     paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: colors.ink,
   },
   badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
@@ -220,9 +255,10 @@ export function RoundIconButton({ name, onPress, label, active, size = 48 }: {
   name: React.ComponentProps<typeof Ionicons>['name']; onPress: () => void; label: string; active?: boolean; size?: number;
 }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
-      style={({ pressed }) => [{ width: size, height: size, borderRadius: size * 0.34, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1 }, shadow]}>
-      <Ionicons name={name} size={size * 0.46} color={active ? colors.danger : colors.primary} />
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+      <Glass radiusSize={size * 0.34} intensity={55} style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name={name} size={size * 0.46} color={active ? colors.danger : colors.primary} />
+      </Glass>
     </Pressable>
   );
 }
@@ -239,7 +275,7 @@ export function HeartButton({ on, onPress }: { on: boolean; onPress: () => void 
 /** Rounded white search field with a magnifier. With onPress it acts as a button that opens search. */
 export function SearchBar({ value, onChangeText, placeholder, onPress }: { value?: string; onChangeText?: (t: string) => void; placeholder: string; onPress?: () => void }) {
   const inner = (
-    <View style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: radius.pill, paddingHorizontal: 16, height: 52, marginBottom: spacing.md }, shadow]}>
+    <Glass radiusSize={radius.pill} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 52, marginBottom: spacing.md }}>
       <Ionicons name="search" size={20} color={colors.muted} />
       {onPress ? (
         <Text style={{ marginLeft: 10, fontSize: 16, color: colors.muted }}>{placeholder}</Text>
@@ -247,7 +283,7 @@ export function SearchBar({ value, onChangeText, placeholder, onPress }: { value
         <TextInput value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.muted} accessibilityLabel={placeholder}
           style={{ flex: 1, marginLeft: 10, fontSize: 16, color: colors.ink }} />
       )}
-    </View>
+    </Glass>
   );
   return onPress ? <Pressable onPress={onPress} accessibilityRole="search" accessibilityLabel={placeholder}>{inner}</Pressable> : inner;
 }
@@ -278,20 +314,21 @@ export function ListingCard({ emoji, title, subtitle, price, saved, onToggleSave
   emoji: string; title: string; subtitle: string; price: string; saved: boolean; onToggleSaved: () => void; onPress: () => void; width?: number;
 }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}, ${price}`}
-      style={({ pressed }) => [{ width, backgroundColor: '#fff', borderRadius: radius.lg, padding: 10, opacity: pressed ? 0.9 : 1 }, shadow]}>
-      <LinearGradient colors={['#F2FBF6', '#D3EFE0']} style={{ height: 128, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}, ${price}`} style={({ pressed }) => ({ width, opacity: pressed ? 0.9 : 1 })}>
+     <Glass style={{ padding: 10 }}>
+      <LinearGradient colors={['rgba(255,255,255,0.75)', 'rgba(167,235,204,0.55)']} style={{ height: 128, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: glass.edge }}>
         <Text style={{ fontSize: 58 }}>{emoji}</Text>
         <View style={{ position: 'absolute', top: 10, left: 10 }}><HeartButton on={saved} onPress={onToggleSaved} /></View>
       </LinearGradient>
       <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '800', color: colors.ink, marginTop: 10 }}>{title}</Text>
       <Text numberOfLines={1} style={{ fontSize: 13, color: colors.muted, marginTop: 2 }}>{subtitle}</Text>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-        <Text style={{ fontSize: 17, fontWeight: '800', color: colors.ok }}>{price}</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={{ flex: 1, fontSize: 17, fontWeight: '800', color: colors.ok, marginRight: 6 }}>{price}</Text>
         <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
           <Ionicons name="arrow-forward" size={18} color="#fff" />
         </View>
       </View>
+     </Glass>
     </Pressable>
   );
 }

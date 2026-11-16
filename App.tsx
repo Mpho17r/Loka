@@ -28,9 +28,9 @@ import CreateListingScreen from './src/screens/CreateListingScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
-const theme = { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.bg, primary: colors.primary, card: colors.bgTop, text: colors.ink, border: 'transparent' } };
+const theme = { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.bg, primary: colors.primary, card: '#BFEBD3', text: colors.ink, border: 'transparent' } };
 const headerLook = {
-  headerStyle: { backgroundColor: colors.bgTop },
+  headerStyle: { backgroundColor: '#BFEBD3' },
   headerShadowVisible: false,
   headerTintColor: colors.primary,
   headerTitleStyle: { fontWeight: '800' as const, color: colors.ink, fontSize: 20 },

@@ -82,7 +82,7 @@ export default function HomeScreen() {
               <Text style={{ color: '#fff', fontSize: 24, fontWeight: '800', lineHeight: 29 }}>{sl.title}</Text>
               <Text style={{ color: 'rgba(255,255,255,0.88)', marginTop: 6, maxWidth: '58%' }}>{sl.sub}</Text>
               <Pressable onPress={() => goTab(sl.tab)} accessibilityRole="button" accessibilityLabel={sl.cta}
-                style={{ position: 'absolute', left: 20, bottom: 18, backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 10 }}>
+                style={{ position: 'absolute', left: 20, bottom: 18, backgroundColor: 'rgba(255,255,255,0.88)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.9)', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 10 }}>
                 <Text style={{ fontWeight: '800', color: colors.ink }}>{sl.cta}</Text>
               </Pressable>
             </LinearGradient>
